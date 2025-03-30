@@ -1,0 +1,151 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // For migrations/seeding with Vercel Postgres
+}
+
+enum UserRole {
+  PATIENT
+  STUDENT
+}
+
+enum ConsultationStatus {
+  REQUESTED // ANGEFRAGT
+  ASSIGNED  // ZUGEWIESEN (Optional internal state if needed before IN_PROGRESS)
+  IN_PROGRESS // LAUFEND
+  COMPLETED // ABGESCHLOSSEN
+  CANCELLED // ABGEBROCHEN
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?   // Used for Credentials provider
+  role          UserRole  @default(PATIENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  patientProfile PatientProfile?
+  studentProfile StudentProfile?
+  sentMessages  Message[] @relation("SenderMessages")
+  consultationsAsPatient Consultation[] @relation("PatientConsultations")
+  consultationsAsStudent Consultation[] @relation("StudentConsultations")
+  uploadedDocuments Document[] @relation("UploaderDocuments")
+
+  // NextAuth.js specific models
+  accounts Account[]
+  sessions Session[]
+}
+
+// NextAuth.js Account model
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String? @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// NextAuth.js Session model
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PatientProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName String // Vorname
+  lastName  String // Nachname
+  dob       DateTime? // Geburtsdatum
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StudentProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName     String // Vorname
+  lastName      String // Nachname
+  university    String // Universität (e.g., "LMU München", "TU München")
+  clinicalYear  Int    // Studienjahr / Klinik-Semester
+  isVerified    Boolean  @default(false) // IMPORTANT: Assume true for seeded students in V1.0
+  averageRating Float?   // Not used in V1.0 logic
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Consultation {
+  id              String   @id @default(cuid())
+  patientId       String
+  patient         User     @relation("PatientConsultations", fields: [patientId], references: [id], onDelete: Cascade)
+  studentId       String?
+  student         User?    @relation("StudentConsultations", fields: [studentId], references: [id], onDelete: SetNull)
+  status          ConsultationStatus @default(REQUESTED)
+  topic           String   // Thema / Betreff (vom Patienten)
+  patientQuestion String   @db.Text // Frage des Patienten
+  summary         String?  @db.Text // Zusammenfassung (vom Studenten)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  messages        Message[]
+  documents       Document[]
+
+  @@index([patientId])
+  @@index([studentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User     @relation("SenderMessages", fields: [senderId], references: [id], onDelete: Cascade) // Patient or Student
+  content        String   @db.Text // Inhalt der Nachricht
+  createdAt      DateTime @default(now())
+
+  @@index([consultationId, createdAt]) // Important for fetching messages in order
+  @@index([senderId])
+}
+
+model Document {
+  id             String   @id @default(cuid())
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  uploaderId     String   // Should typically be the patient
+  uploader       User     @relation("UploaderDocuments", fields: [uploaderId], references: [id], onDelete: Cascade)
+  fileName       String   // Original Dateiname
+  storageUrl     String   @db.Text // URL from Vercel Blob
+  mimeType       String   // e.g., 'application/pdf', 'image/jpeg'
+  fileSize       Int?     // Größe in Bytes
+  createdAt      DateTime @default(now())
+
+  @@index([consultationId])
+  @@index([uploaderId])
+}
