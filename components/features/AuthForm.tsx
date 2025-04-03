@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { LoginSchema, RegisterSchema } from '@/lib/validation';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button'; // Ensure Button is imported
 import {
     Form,
     FormControl,
@@ -70,11 +70,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
     React.useEffect(() => {
         if (mode === 'register') {
             setShowStudentFields(selectedRole === UserRole.STUDENT);
-            // Optional: Reset student fields if role changes away from STUDENT
-            // if (selectedRole !== UserRole.STUDENT) {
-            //     form.resetField('university');
-            //     form.resetField('clinicalYear');
-            // }
         }
     }, [selectedRole, mode, form]);
 
@@ -96,9 +91,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
                         });
                     } else if (result?.ok) {
                         toast.success("Anmeldung erfolgreich!");
-                        // Redirect based on role - requires session check or redirect from middleware
-                        // For simplicity, rely on middleware or redirect to a generic place first
-                        // Or check role from session after redirect? Let's use callbackUrl for now.
                         router.push(callbackUrl);
                         router.refresh(); // Refresh server components
                     } else {
@@ -121,14 +113,11 @@ export default function AuthForm({ mode }: AuthFormProps) {
                     toast.success("Registrierung erfolgreich!", {
                         description: result.message,
                     });
-                    // Redirect to login page after successful registration
                     router.push('/login');
                 } else {
-                    // Display general error message
                     toast.error("Registrierung fehlgeschlagen", {
                         description: result.message || "Bitte überprüfen Sie Ihre Eingaben.",
                     });
-                    // Set field-specific errors if provided by the server action
                     if (result.fieldErrors) {
                         Object.entries(result.fieldErrors).forEach(([field, errors]) => {
                              if (errors) {
@@ -221,6 +210,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                         <PopoverTrigger asChild>
                                         <FormControl>
                                             <Button
+                                                type="button" // Prevent form submission on Popover trigger click
                                                 variant={"outline"}
                                                 className={cn(
                                                     "w-[240px] pl-3 text-left font-normal",
@@ -283,7 +273,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                         <FormItem>
                                             <FormLabel>Klinisches Semester / Studienjahr</FormLabel>
                                             <FormControl>
-                                                {/* Use type="number" for better mobile input, rely on Zod coerce */}
                                                 <Input type="number" placeholder="z.B. 3" {...field} onChange={event => field.onChange(+event.target.value)} disabled={isPending} />
                                             </FormControl>
                                              <FormDescription>In welchem klinischen Jahr/Semester sind Sie?</FormDescription>
@@ -343,16 +332,17 @@ export default function AuthForm({ mode }: AuthFormProps) {
                  {mode === 'login' && (
                     <div className="text-right">
                         <Button type="button" variant="link" size="sm" asChild className="font-normal px-0">
-                           {/* V1: Link only, no functionality */}
                            <Link href="#">Passwort vergessen?</Link>
                         </Button>
                     </div>
                 )}
 
-                <Button type="submit" className="w-full" disabled={isPending}>
+                {/* --- Add animateInteraction prop --- */}
+                <Button type="submit" className="w-full" disabled={isPending} animateInteraction>
                     {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {mode === 'login' ? 'Anmelden' : 'Registrieren'}
                 </Button>
+                {/* --- --- */}
 
                  {/* Switch between Login/Register */}
                  <div className="text-center text-sm text-muted-foreground">
