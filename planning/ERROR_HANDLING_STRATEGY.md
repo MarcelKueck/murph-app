@@ -37,3 +37,43 @@ Implement robust and user-friendly error handling for both server-side operation
 
 *   Create helper functions or hooks to simplify API calls and centralize error handling logic (e.g., a custom `fetch` wrapper that automatically parses JSON, checks status codes, and extracts error messages).
 *   Ensure loading states (`isLoading`) are properly managed alongside error states to provide clear UI feedback during asynchronous operations.
+*   
+
+## 5. Review 03.04.25:
+
+# Murph - Version 1.0: Error Handling Strategy Status
+
+## 1. Goal
+
+Implement robust and user-friendly error handling using server-side checks and client-side Toasts with clear German feedback.
+
+## 2. Implementation Status
+
+*   **Server-Side (API Routes / Server Actions):**
+    *   `try...catch` blocks are used in implemented actions (`actions/*.ts`) and route handlers (`/app/api/**/*.ts`). *(Confirmed)*
+    *   **Validation Errors:** Zod validation is used in `registerUser`, `createConsultation`, `/api/nachrichten`, `completeConsultation`. Errors are caught and returned with `success: false` and sometimes `fieldErrors`. *(Confirmed)*
+    *   **Authorization Errors:** Basic role/ownership checks using `auth()` helper and DB lookups are implemented in actions and route handlers. Return `success: false` or 401/403 status codes. *(Confirmed)*
+    *   **Not Found Errors:** Handled in specific cases (e.g., `acceptConsultation`, `completeConsultation` if consultation doesn't exist or isn't assignable). *(Confirmed)*
+    *   **Generic Errors:** Generic `catch` blocks exist, returning 500 or `success: false` with generic messages. Server-side logging (`console.error`) is present. *(Confirmed)*
+    *   **Response Format:** Actions generally return `{ success: boolean; message: string; ... }`. API routes return `NextResponse.json({ error: string }, { status: number })`. *(Confirmed, slight inconsistency between actions/routes)*
+*   **Client-Side:**
+    *   **UI Feedback:** `sonner` (Toasts) is implemented (`app/layout.tsx`, `AuthForm`, `ConsultationRequestForm`, `ConsultationCard`, `MessageInput`, `ConsultationSummaryForm`). *(Confirmed)*
+    *   **Toast Usage:**
+        *   `destructive` variant used for errors (`toast.error`). *(Confirmed)*
+        *   Displays messages from server action/API responses. *(Confirmed)*
+        *   Includes German titles/descriptions. *(Confirmed)*
+    *   **Specific Scenarios:**
+        *   Login/Registration failures show toasts. *(Confirmed)*
+        *   Form submission errors (Consultation Request, Message Send, Summary Save, Accept Consultation) trigger toasts based on API/action response. *(Confirmed)*
+        *   File Upload errors trigger toasts via `onUploadError` callback. *(Confirmed)*
+        *   Data Fetching errors (e.g., `ConsultationList`) display an `Alert` component within the UI. *(Confirmed)*
+    *   **Loading States:** `useTransition` is used to manage pending states and disable buttons during form submissions/actions. *(Confirmed)*
+
+## 3. Conclusion & Refinement Needs for V1
+
+The basic error handling mechanism using `try...catch`, server/action responses, and client-side toasts is implemented for key flows.
+*   **Comprehensiveness:** A systematic review is needed to ensure *all* potential error points (API calls, actions, edge cases in logic) have appropriate handling.
+*   **Specificity:** Improve the specificity of error messages returned from the server where possible (e.g., distinguishing different database errors or authorization failures beyond a generic message).
+*   **Consistency:** Ensure consistent error response formats from both API Routes and Server Actions. Standardize German error message phrasing.
+*   **User Experience:** Review toast messages for clarity and helpfulness. Consider if certain errors warrant more persistent inline feedback instead of just a transient toast.
+*   **Logging:** Enhance server-side logging for better debugging (include more context with errors).

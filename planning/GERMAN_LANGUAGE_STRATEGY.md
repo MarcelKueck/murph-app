@@ -61,3 +61,28 @@ Ensure all files containing German text (especially special characters like ä, 
 ## 5. Future Considerations (Beyond V1.0)
 
 If multi-language support is needed later, the hardcoded strings will need to be extracted into locale files (e.g., JSON) and an i18n library (like `next-intl` or `react-i18next`) will need to be integrated. The current approach prioritizes speed and simplicity for the German-only V1.0.
+
+## 6. Review 03.04.25:
+
+# Murph - Version 1.0: German Language Strategy Status
+
+## 1. Scope & Strategy
+
+Version 1.0 is exclusively in German, implemented via hardcoded strings directly in components and files. No i18n library is used. *(Confirmed)*
+
+## 2. Implementation Status
+
+*   **Hardcoded German:** User-facing text reviewed in key components (`AuthForm`, `Header`, `Footer`, `ConsultationCard`, `ConsultationRequestForm`, `ChatInterface`, page titles, etc.) appears to be predominantly hardcoded in German. *(Confirmed)*
+*   **Key Terms:** Common terms like "Beratung", "Anmelden", "Registrieren", "Profil", "Dashboard", "Nachricht", "Dokument", "Abgeschlossen", "Angefragt", etc., are used. *(Confirmed)*
+*   **File Encoding:** Assumed to be UTF-8 (standard for Next.js/VS Code).
+
+## 3. Areas for Review / Refinement
+
+*   **Completeness:** A thorough pass is needed across the *entire* application UI (including less common states, error messages, tooltips, aria-labels) to ensure *all* user-visible text is in German and makes sense in context.
+*   **Consistency:** Verify that terms like "Beratung", "Anfrage", "Status labels" are used consistently across different sections (Patient dashboard, Student dashboard, Chat view).
+*   **Clarity & Tone:** Ensure the language is professional, clear, patient-friendly, and accurately reflects the platform's purpose (explanation, not diagnosis), especially in instructional text and disclaimers. Check `CONSULTATION_STATUS_LABELS` in `lib/constants.ts`.
+*   **Error Messages:** Ensure all error messages (from API/Actions and client-side validation) displayed via toasts or inline are in clear, helpful German.
+
+## 4. Conclusion
+
+The strategy of hardcoded German text is implemented. The main UI elements use German. A final, comprehensive review is required to guarantee completeness, consistency, and clarity across all user-facing text for V1.0.

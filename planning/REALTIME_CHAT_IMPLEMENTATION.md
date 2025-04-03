@@ -83,3 +83,46 @@ Implement a real-time text chat interface for ongoing consultations (`IN_PROGRES
 
 *   Client-side: Handle Pusher connection errors if possible (library might provide events). Display Toast notifications for failures in sending messages.
 *   Server-side: Log errors during Pusher triggering or authentication.
+*   
+
+## 8. Review 03.04.25:
+
+# Murph - Version 1.0: Real-time Chat Implementation Status (Pusher)
+
+## 1. Goal
+
+Implement real-time text chat for `IN_PROGRESS` consultations using Pusher Channels.
+
+## 2. Implementation Status
+
+*   **Pusher Configuration:**
+    *   **Environment Variables:** Setup relies on standard Pusher env vars (`PUSHER_APP_ID`, `NEXT_PUBLIC_PUSHER_KEY`, `PUSHER_SECRET`, `NEXT_PUBLIC_PUSHER_CLUSTER`). *(Confirmed)*
+    *   **Server-side Instance (`lib/pusher/server.ts`):** Initialized using env vars. Exports `pusherServer` instance and `triggerPusherEvent` helper function. Includes basic checks for missing env vars. *(Confirmed)*
+    *   **Client-side Instance (`lib/pusher/client.ts`):** Initialized using public env vars. Exports `pusherClient`. Configures `authEndpoint`. Includes basic checks and connection state logging. *(Confirmed)*
+*   **Channels and Events:**
+    *   **Channel Naming:** Uses `private-consultation-${consultationId}` convention. *(Confirmed)*
+    *   **Events:** `new-message` event is used. *(Confirmed)*
+    *   **Payload:** Matches the required structure for frontend components (id, content, sender details, etc.). *(Confirmed)*
+*   **Backend Logic (Message Sending - `/api/nachrichten/route.ts`):**
+    *   Authenticates user and authorizes based on consultation participation and `IN_PROGRESS` status. *(Confirmed)*
+    *   Validates message content. *(Confirmed)*
+    *   Saves `Message` to DB. *(Confirmed)*
+    *   Triggers `new-message` event using `triggerPusherEvent` helper after successful DB save. *(Confirmed)*
+    *   Returns the created message data in the response. *(Confirmed)*
+*   **Backend Logic (Pusher Authentication - `/api/pusher/auth/route.ts`):**
+    *   Receives `socket_id` and `channel_name`. *(Confirmed)*
+    *   Authenticates user session. *(Confirmed)*
+    *   Extracts `consultationId` and verifies user participation via DB check. *(Confirmed)*
+    *   Uses `pusherServer.authorizeChannel` to return signature if authorized. *(Confirmed)*
+    *   Returns 401/403/500 on errors. *(Confirmed)*
+*   **Frontend Logic (`ChatInterface.tsx`, `usePusherSubscription.ts`):**
+    *   `usePusherSubscription` hook implemented to handle subscription, event binding, and unsubscription lifecycle. *(Confirmed)*
+    *   `ChatInterface` fetches initial messages and uses the hook to listen for `new-message` events. *(Confirmed)*
+    *   Message list state (`messages`) updated on receiving new messages (handles potential duplicates). *(Confirmed)*
+    *   `MessageInput` calls the `/api/nachrichten` endpoint. *(Confirmed)*
+    *   Optimistic UI update implemented via `onMessageSent` callback. *(Confirmed)*
+    *   Basic connection status awareness implemented in `ChatInterface`. *(Confirmed)*
+
+## 3. Conclusion
+
+The core real-time chat functionality using Pusher is implemented. Messages are sent, received via Pusher, and displayed in the UI. Authentication for private channels is working. Remaining work involves UI polish for the chat interface, robust handling of connection states/errors for the user, and thorough testing.

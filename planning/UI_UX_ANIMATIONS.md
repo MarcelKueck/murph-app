@@ -61,3 +61,44 @@ Create a visually stunning, modern, dynamic, and trustworthy user experience usi
 *   Create reusable animation variants in a constants file or within the `animations` component directory if applicable.
 *   Ensure animations are disabled if the user prefers reduced motion (respect `prefers-reduced-motion` media query). Framer Motion often handles this automatically, but verify.
 *   Test animations across different browsers and devices, paying attention to performance.
+*   
+
+## 5 Review 03.04.25:
+
+# Murph - Version 1.0: UI/UX Enhancement & Animation Status
+
+## 1. Goal
+
+Create a visually stunning, modern, dynamic, and trustworthy user experience using subtle but impactful animations and micro-interactions with Framer Motion and Tailwind CSS.
+
+## 2. Implementation Status
+
+*   **Framer Motion Integration:** Installed and basic usage observed.
+*   **Tailwind CSS Transitions:** Used for basic hover effects (implicitly via Shadcn components, potentially custom).
+*   **Implemented Animations (Based on Code Review):**
+    *   **List Item Entrance:** `ConsultationCard.tsx` uses `motion.div` with `variants` for a basic fade-in/slide-up effect (likely intended for use with `AnimatePresence` or viewport triggering).
+    *   **Loading States:** `Skeleton` components from Shadcn used. Tailwind's `animate-spin` used for loader icons (`Loader2`).
+*   **Planned Animations (From Initial Prompt - Mostly NOT Yet Implemented):**
+    *   **Page Transitions:** Subtle fade-in between pages. *(Not Implemented)*
+    *   **Button Micro-interactions:**
+        *   Primary CTA pulse/scale effect. *(Not Implemented)*
+        *   General button hover/focus scale. *(Not Implemented)*
+        *   Smooth color transitions (partially via Tailwind/Shadcn defaults). *(Partially Implemented)*
+    *   **Form Submission Feedback:** Animated checkmark on success. *(Not Implemented)*
+    *   **Loading States:** Pulsing animation on skeletons. Custom animated SVG spinner for `LoadingSpinner.tsx`. *(Partially Implemented - Skeletons exist, pulse/custom spinner not)*
+    *   **SVG Animations:** Main logo animation, other animated indicators. *(Not Implemented)*
+    *   **Hover Effects (Cards, Nav Links):** Card lift/shadow increase. *(Not Implemented)*
+    *   **Layout Animations (Dashboard):** Smooth transitions on tab change/filtering. *(Not Implemented)*
+
+## 3. Conclusion
+
+Basic animation setup (Framer Motion install, Tailwind transitions) is in place. Loading states use skeletons. Minimal entrance animation exists on `ConsultationCard`. However, the majority of the *specific, dynamic animations* requested in the initial prompt to achieve a "visually stunning" feel (button effects, page transitions, richer loading states, hover effects) **require implementation**. This area needs significant focus to meet the V1.0 UX goals.
+
+## 4. Next Steps for V1.0
+
+1.  Implement subtle **page transitions** using Framer Motion in layouts.
+2.  Implement **list item entrance animations** consistently (e.g., ConsultationList, MessageList) with staggering.
+3.  Implement **button micro-interactions** (pulse/scale) for primary CTAs.
+4.  Add subtle **hover effects** (lift/shadow) to cards.
+5.  Refine **loading state visuals** (pulsing skeletons, potentially animated logo/spinner).
+6.  Implement **animated feedback** (e.g., checkmark) on successful form submissions.

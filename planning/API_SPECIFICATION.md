@@ -250,3 +250,94 @@ This document outlines the API endpoints (Route Handlers or Server Actions) requ
     ```
 *   **DB Interactions:** Find `User` based on session. Include related `PatientProfile` or `StudentProfile`.
 *   **Error Handling:** 401, 500.
+*   
+
+## Review 03.04.25:
+
+# Murph - Version 1.0: API Specification Status
+
+This document reflects the implemented API endpoints and Server Actions based on code review.
+
+## Implemented Endpoints & Actions
+
+**Authentication (NextAuth.js)**
+
+*   **Route:** `/api/auth/[...nextauth]/route.ts`
+*   **Handler:** `handlers` from `@/lib/auth`
+*   **Provider:** Credentials (Email/Password) implemented in `auth.config.ts` (`authorize` function performs DB lookup and password check).
+*   **Strategy:** JWT strategy with Prisma Adapter (configured in `lib/auth.ts`).
+*   **Callbacks:** `jwt` and `session` callbacks implemented in `lib/auth.ts` to add `id` and `role` to token/session. `authorized` callback in `auth.config.ts` handles basic route protection logic.
+
+**Registration (Server Action)**
+
+*   **Action:** `registerUser` in `actions/auth.ts`
+*   **Triggered by:** `AuthForm` component.
+*   **Auth:** Public
+*   **Input:** `values: z.infer<typeof RegisterSchema>`
+*   **Output:** `Promise<RegistrationResult>` (`{ success: boolean; message: string; fieldErrors?: ... }`)
+*   **Logic:** Validates input with Zod, checks for existing email, hashes password (`bcrypt`), creates `User` and corresponding `PatientProfile` or `StudentProfile` within a transaction.
+*   **Error Handling:** Returns `success: false` with messages for validation errors, existing email, or generic DB errors.
+
+**Consultations (Server Actions)**
+
+*   **Action:** `createConsultation` in `actions/consultations.ts`
+    *   **Triggered by:** `ConsultationRequestForm` component.
+    *   **Auth:** Patient Role (checked via `auth()` helper).
+    *   **Input:** `values: z.infer<typeof ConsultationRequestSchema>`, `documents: UploadedDocument[]`
+    *   **Output:** `Promise<ConsultationActionResult>`
+    *   **Logic:** Validates input, creates `Consultation` (status `REQUESTED`), creates associated `Document` records based on input array. Calls `revalidatePath('/patient/dashboard')`.
+    *   **Error Handling:** Returns `success: false` for validation, auth, or DB errors.
+
+*   **Action:** `acceptConsultation` in `actions/consultations.ts`
+    *   **Triggered by:** `ConsultationCard` component (Student Dashboard).
+    *   **Auth:** Student Role (checked via `auth()` helper).
+    *   **Input:** `consultationId: string`
+    *   **Output:** `Promise<{ success: boolean; message: string; error?: any }>` (Simplified return type used currently)
+    *   **Logic:** Validates `consultationId`, finds consultation, checks status is `REQUESTED`, updates `studentId` and sets status to `IN_PROGRESS` within a transaction. Calls `revalidatePath('/student/dashboard')`.
+    *   **Error Handling:** Returns `success: false` with specific messages for 'Not Found', 'Not Available', or generic errors.
+
+*   **Action:** `completeConsultation` in `actions/consultations.ts`
+    *   **Triggered by:** `ConsultationSummaryForm` component.
+    *   **Auth:** Student Role (checked via `auth()` helper, verifies student is assigned).
+    *   **Input:** `consultationId: string`, `summary: string`
+    *   **Output:** `Promise<ConsultationActionResult>`
+    *   **Logic:** Validates `consultationId` and `summary` length. Finds consultation, checks it's assigned to the student and status is `IN_PROGRESS`. Updates `summary` and sets status to `COMPLETED`. Calls `revalidatePath` for student dashboard and consultation detail page.
+    *   **Error Handling:** Returns `success: false` for validation, auth, status errors, or DB errors.
+
+**Messages (API Route Handler)**
+
+*   **Route:** `/api/nachrichten/route.ts`
+*   **Method:** POST
+*   **Auth:** Authenticated (Patient owner or assigned Student, checked via DB lookup).
+*   **Request Body:** `{ consultationId: string; content: string }` (Validated with Zod).
+*   **Response (Success - 201 Created):** Formatted message object including sender details (firstName, lastName, role).
+*   **Logic:** Authenticates user, validates input, verifies user is part of the active (`IN_PROGRESS`) consultation, creates `Message` record in DB.
+*   **Side Effects:** Triggers `new-message` event on `private-consultation-${consultationId}` channel via `triggerPusherEvent` helper.
+*   **Error Handling:** Returns 400 (Validation, Not Active), 401, 403 (Not part of consultation), 404 (Consultation not found), 500 (DB/Pusher errors).
+
+**File Upload (API Route Handler)**
+
+*   **Route:** `/api/upload/route.ts`
+*   **Method:** POST
+*   **Auth:** Authenticated (Patient Role).
+*   **Logic:** Uses `@vercel/blob/client`'s `handleUpload` server helper. Includes `onBeforeGenerateToken` to authorize uploads based on user ID and path (`requests/${userId}/...`), restrict content types, and embed `userId` in the token payload. `onUploadCompleted` logs success.
+*   **Error Handling:** Relies on `handleUpload` and returns appropriate JSON error responses (400, 401, 500).
+
+**Pusher Authentication (API Route Handler)**
+
+*   **Route:** `/api/pusher/auth/route.ts`
+*   **Method:** POST
+*   **Auth:** Authenticated.
+*   **Request Body:** `socket_id`, `channel_name` (form data).
+*   **Logic:** Verifies session, extracts `consultationId` from channel name, confirms user is patient or assigned student for that consultation via DB lookup, uses `pusherServer.authorizeChannel` to generate and return signature.
+*   **Error Handling:** Returns 401 (No session), 403 (Not authorized for channel), 400 (Invalid channel name), 500.
+
+**Profile (Implicit via Server Components)**
+
+*   No dedicated `/api/profil` endpoint was found. Profile data is fetched directly within Server Components (`/app/patient/profil/page.tsx`, `/app/student/profil/page.tsx`) using `auth()` and `prisma`.
+
+## Remaining/Refinement Needs for V1
+
+*   **Error Handling:** Systematically review all endpoints/actions for comprehensive error handling, ensuring consistent response formats and user-friendly German messages. Test edge cases.
+*   **Authorization:** Double-check authorization logic in all endpoints/actions to ensure users can only access/modify data they are permitted to.
+*   **Performance:** Consider potential optimizations for database queries if needed, although current load is likely low.

@@ -111,3 +111,47 @@ Implement file uploading functionality for patients submitting consultation requ
 *   Create links (`<a>`) using the `storageUrl`. Set `target="_blank"` to open in a new tab.
 *   Display the `fileName` as the link text.
 *   Ensure Vercel Blob permissions allow public read access *or* implement a mechanism to generate temporary signed URLs if stricter access control is needed (more complex, likely out of scope for V1.0 basic viewing). Assume public read for simplicity in V1.0.
+*   
+## 8 Review 03.04.25:
+
+# Murph - Version 1.0: File Upload Status (Vercel Blob)
+
+## 1. Goal
+
+Implement file uploading for patients during consultation requests, storing files via Vercel Blob.
+
+## 2. Vercel Blob Setup
+
+*   **Integration & Store:** Assumed to be set up in Vercel project.
+*   **Environment Variable:** `BLOB_READ_WRITE_TOKEN` is required and configured in `.env.local` (placeholder used, needs actual token for deployment). *(Confirmed Setup)*
+
+## 3. Implementation Status
+
+*   **Technology:**
+    *   Client-side: `@vercel/blob/client` (`upload` function) used in `FileUpload.tsx`. *(Confirmed)*
+    *   Server-side: `@vercel/blob/client`'s `handleUpload` helper used within `/api/upload/route.ts`. *(Confirmed)*
+*   **Frontend (`FileUpload.tsx`, `ConsultationRequestForm.tsx`):**
+    *   UI: Input trigger button, progress display (`Progress`), file list for upload/completion status, remove button implemented. *(Confirmed)*
+    *   Logic:
+        *   File selection and client-side validation (type, size, max count) implemented. *(Confirmed)*
+        *   Calls `@vercel/blob/client` `upload` function. *(Confirmed)*
+        *   `handleUploadUrl` option points to `/api/upload`. *(Confirmed)*
+        *   Callbacks (`onUploadProgress`, `onUploadComplete`, `onUploadError`) used to update UI (progress bar, toasts) and manage state. *(Confirmed)*
+        *   Successful upload results (URL, name, type, size, temp ID) stored in `ConsultationRequestForm` state (`uploadedFiles`). *(Confirmed)*
+*   **Backend (`/app/api/upload/route.ts`):**
+    *   Authentication: Checks for authenticated user session (Patient role required). *(Confirmed)*
+    *   Logic: Uses `handleUpload` helper. *(Confirmed)*
+    *   Security: `onBeforeGenerateToken` implemented to authorize path based on `userId` (`requests/${userId}/...`), restrict content types, and embed `userId` in token. *(Confirmed)*
+    *   `onUploadCompleted` implemented for logging. *(Confirmed)*
+    *   Handles errors and returns JSON responses. *(Confirmed)*
+*   **Data Association (`actions/consultations.ts` - `createConsultation`):**
+    *   The `createConsultation` server action receives the array of successfully uploaded file details (`UploadedDocument[]`). *(Confirmed)*
+    *   It iterates this array and creates corresponding `Document` records in the database, linked to the new `Consultation` and the `uploaderId`. *(Confirmed)*
+*   **Document Viewing (`DocumentLink.tsx` in `ChatInterface.tsx`):**
+    *   Fetches `Document` records as part of consultation details. *(Confirmed)*
+    *   `DocumentLink` component renders a link (`<a>`) with `target="_blank"` using the `storageUrl`, displaying the `fileName`. *(Confirmed)*
+    *   Relies on public read access for blobs (Vercel default). *(Confirmed)*
+
+## 4. Conclusion
+
+The file upload flow using Vercel Blob is fully implemented from client-side selection and progress display to server-side handling, authorization, database association, and viewing links in the chat. Requires the actual `BLOB_READ_WRITE_TOKEN` for deployment. UI polish for upload states might be beneficial.

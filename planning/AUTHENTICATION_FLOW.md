@@ -62,3 +62,43 @@ Implement secure user authentication (Registration and Login) for both Patients 
 
 *   Provide a "Logout" ("Abmelden") button in the `UserMenu` (Header component).
 *   On click, call NextAuth.js `signOut({ callbackUrl: '/' })` function to clear the session and redirect to the landing page.
+*   
+
+## 8. Review 03.04.25:
+
+# Murph - Version 1.0: Authentication Flow Status (NextAuth.js v5 / Auth.js)
+
+## 1. Goal
+
+Implement secure Email/Password authentication for Patients and Students using NextAuth.js.
+
+## 2. Implementation Status
+
+*   **Configuration (`lib/auth.ts`, `auth.config.ts`):**
+    *   `CredentialsProvider`: Implemented with `authorize` function using `prisma` and `bcrypt.compare`. Returns user `id`, `email`, `role`. *(Confirmed)*
+    *   `PrismaAdapter`: Configured and used. *(Confirmed)*
+    *   **Session Strategy:** `jwt` strategy is configured in `lib/auth.ts`. *(Confirmed - Note: Initial plan mentioned `database`, but implementation uses `jwt`)*
+    *   `Callbacks`: `jwt` and `session` callbacks are implemented to inject `id` and `role` into the token and session object. `authorized` callback handles basic route protection. *(Confirmed)*
+    *   `Secret`: Relies on `NEXTAUTH_SECRET`. *(Confirmed)*
+    *   `Pages`: `signIn: '/login'` configured. *(Confirmed)*
+*   **Registration (`AuthForm` + `actions/auth.ts`):**
+    *   UI (`AuthForm`): Implemented with conditional fields for Patient/Student role selection and corresponding data (DOB, University/Year). *(Confirmed)*
+    *   Server Action (`registerUser`): Implemented. Handles validation (Zod), email uniqueness check, password hashing (`bcrypt`), `User` & `Profile` creation in a transaction. *(Confirmed)*
+    *   Redirects to `/login` on success. *(Confirmed)*
+*   **Login (`AuthForm` + NextAuth):**
+    *   UI (`AuthForm`): Implemented with Email/Password fields. *(Confirmed)*
+    *   Logic: Uses `signIn('credentials', { redirect: false })`. Handles success/error feedback using toasts. Redirects based on `callbackUrl` (middleware handles target dashboard). *(Confirmed)*
+*   **Session Management:**
+    *   Handled by NextAuth.js (JWT strategy). *(Confirmed)*
+    *   `useSession` hook used in `Header.tsx`. *(Confirmed)*
+    *   `auth()` helper used in Server Components/Actions/Route Handlers. *(Confirmed)*
+*   **Route Protection (`middleware.ts`):**
+    *   Middleware implemented using `NextAuth(authConfig).auth`. *(Confirmed)*
+    *   `matcher` config targets `/patient/:path*` and `/student/:path*`, excluding public/API routes. *(Confirmed)*
+    *   `authorized` callback in `auth.config.ts` handles redirection logic for authenticated/unauthenticated users on protected/auth pages. *(Confirmed)*
+*   **Logout:**
+    *   Implemented in `Header.tsx` using `signOut({ callbackUrl: '/' })`. *(Confirmed)*
+
+## 3. Conclusion
+
+The core Email/Password authentication flow using NextAuth.js v5 (Auth.js) is implemented according to the plan (with JWT strategy instead of the initially mentioned database strategy for sessions). It includes registration, login, logout, session management, and route protection. Remaining work is primarily UI polish and potentially refining error message details.

@@ -68,3 +68,31 @@ Create consultations covering different states:
 *   Wrap the seeding logic in a `main` function and handle potential errors.
 *   Ensure `disconnect` is called on the Prisma client at the end.
 *   Consider using a library like `faker-js` for more varied German names/data if needed, but manual realistic data is sufficient for V1.0.
+*   
+## 5. Review 03.04.25:
+
+# Murph - Version 1.0: Database Seeding Status (`prisma/seed.ts`)
+
+## 1. Objective
+
+Populate the Vercel Postgres database with realistic German demo data to facilitate development, testing, and initial demonstrations of Murph V1.0.
+
+## 2. Script Status (`prisma/seed.ts`)
+
+*   **Implemented:** Yes, the `prisma/seed.ts` file exists and contains logic to seed the database.
+*   **Execution:** Designed to be run via `npx prisma db seed`.
+*   **Data Clearing:** Includes logic to delete existing data (Messages, Documents, Consultations, Profiles, Auth Data, Users) before seeding, ensuring a clean state.
+*   **Password Hashing:** Uses `bcrypt.hashSync` (Note: `hash` async is generally preferred but sync is used here) to hash demo passwords.
+*   **Data Content:**
+    *   **Users & Profiles:** Seeds multiple Patients and Students with German names, emails, and relevant profile data (DOB for patients, University/Year for students).
+    *   **Student Verification:** Correctly seeds students with `isVerified: true` as required for V1.0 testing.
+    *   **Consultations:** Creates consultations in different states:
+        *   `REQUESTED`: Includes examples with and without documents (using placeholder URLs).
+        *   `IN_PROGRESS`: Includes assigned student and sample messages.
+        *   `COMPLETED`: Includes assigned student, sample messages, and a summary.
+    *   **Relationships:** Correctly links profiles, consultations, messages, and documents to users.
+    *   **Timestamps:** Uses `Date.now()` offsets to simulate realistic message timing.
+
+## 3. Confirmation
+
+The implemented seeding script appears to correctly fulfill the requirements outlined in the initial V1.0 plan, providing a solid dataset for development and testing. It reflects the Prisma schema accurately.

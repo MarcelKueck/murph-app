@@ -58,3 +58,40 @@ To proactively build user trust by clearly, consistently, and visually communica
 ### Component: `TrustBadge.tsx`
 
 *   A reusable component displaying an icon (shield, lock, checkmark) and a short German text snippet related to trust aspects. Can be used across different pages/sections.
+*   
+
+## Review 03.04.25:
+
+# Murph - Version 1.0: Trust & Security Communication Status
+
+## 1. Goal
+
+Proactively build user trust by clearly communicating data security, privacy, and confidentiality principles (esp. "ärztliche Schweigepflicht" applied to students).
+
+## 2. Implementation Status
+
+*   **Core Messages:** Key messages ("Erklärung, keine Diagnose", "Vertraulichkeit", "Datensicherheit") are present in some areas.
+*   **Landing Page (`/app/(landing)/page.tsx`):**
+    *   Purpose clarity statement present. *(Confirmed)*
+    *   Dedicated Trust section with `TrustBadge` components for "Geprüfte Studenten", "Vertraulichkeit", and "Datensicherheit". *(Confirmed)*
+*   **Footer (`/components/core/Footer.tsx`):**
+    *   Includes links to Datenschutz/AGB. *(Confirmed)*
+    *   Includes icons/text snippets for "Datensicherheit" and "Vertraulichkeit". *(Confirmed)*
+    *   Includes explicit disclaimer text reinforcing "Erklärung, keine Diagnose" and mentioning "ärztliche Schweigepflicht". *(Confirmed)*
+*   **Registration Page (`/app/(auth)/registrieren/page.tsx`):**
+    *   Includes link to AGB/Datenschutz in submission text. *(Confirmed)*
+    *   No explicit reassurance text at the top of the form found in review. *(Needs Implementation)*
+*   **Consultation Request Form (`/app/patient/anfrage/page.tsx`):**
+    *   Includes icons/text snippets for "Vertrauliche Behandlung" and "Sichere Datenübertragung" in the CardHeader. *(Confirmed)*
+    *   Includes specific note about handling sensitive data in the `patientQuestion` description. *(Confirmed)*
+    *   No specific note found directly within the file upload section itself. *(Needs Implementation)*
+*   **Visual Design:** Uses Shadcn/ui defaults, custom colors defined in `tailwind.config.ts` (brand primary/secondary). Layout is generally clean based on component structure. *(Partially Implemented - Base exists)*
+*   **Component:** `TrustBadge.tsx` implemented and used. *(Confirmed)*
+
+## 3. Conclusion & Refinement Needs for V1
+
+Core trust elements are implemented, particularly on the landing page and footer. The `TrustBadge` component provides a good visual tool.
+*   **Enhance Consistency:** Ensure trust messages (icons, text snippets) appear consistently where relevant (e.g., add reassurance to Registration, add specific note to FileUpload section).
+*   **Strengthen Wording:** Review the wording of trust statements for maximum clarity and impact, especially regarding the application of "Schweigepflicht" to students.
+*   **Visual Polish:** Integrate trust signals more deeply into the overall visual design language beyond just badges/text (e.g., secure iconography, color usage).
+*   **Review Static Pages:** Ensure the actual content of `/agb` and `/datenschutz` (when added) aligns with the trust promises made elsewhere.
