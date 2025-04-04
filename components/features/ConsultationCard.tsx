@@ -1,28 +1,31 @@
 // components/features/ConsultationCard.tsx
 'use client';
 
-import React, { useState, useTransition } from 'react'; // Added useState
+import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Clock, Loader2, User, Users, Handshake } from "lucide-react";
-import { ConsultationStatus, User as PrismaUser, UserRole } from '@prisma/client';
+import { ArrowRight, Clock, Loader2, User, Users, Handshake, Eye } from "lucide-react"; // Added Eye icon
+import { ConsultationStatus, UserRole, Document } from '@prisma/client'; // Added Document
 import { formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { motion } from 'framer-motion';
 import { CONSULTATION_STATUS_LABELS, CONSULTATION_STATUS_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import AnimatedCheckmark from '@/components/ui/AnimatedCheckmark'; // Import the checkmark
+import AnimatedCheckmark from '@/components/ui/AnimatedCheckmark';
 
 type AcceptAction = (consultationId: string) => Promise<{ success: boolean; message: string; error?: any }>;
 
+// Updated type to include documents and question (needed if logic changes, but preview handled by parent now)
 type ConsultationForCard = {
     id: string;
     topic: string;
     status: ConsultationStatus;
     createdAt: Date;
+    patientQuestion: string; // Keep this for potential future card logic
+    documents: Document[];   // Keep this for potential future card logic
     patient: {
         patientProfile?: {
             firstName: string;
@@ -40,7 +43,9 @@ type ConsultationForCard = {
 interface ConsultationCardProps {
   consultation: ConsultationForCard;
   userRole: UserRole;
-  onAccept?: AcceptAction;
+  onAccept?: AcceptAction; // Still needed for the dialog
+  showAcceptButton?: boolean; // Control if accept button shows directly on card
+  onPreviewClick?: () => void; // Callback to open preview
 }
 
 const cardVariants = {
@@ -48,9 +53,17 @@ const cardVariants = {
     visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } }
 };
 
-export default function ConsultationCard({ consultation, userRole, onAccept }: ConsultationCardProps) {
-    const [isPending, startTransition] = useTransition();
-    const [showSuccess, setShowSuccess] = useState(false); // State for success animation
+export default function ConsultationCard({
+    consultation,
+    userRole,
+    onAccept, // Still needed for the dialog, passed via parent
+    showAcceptButton = true, // Default to true (for patient/non-preview student view)
+    onPreviewClick // Callback from parent
+}: ConsultationCardProps) {
+    // Note: isPending and showSuccess state are now managed within the Dialog for the Accept action
+    // const [isPending, startTransition] = useTransition(); // Removed from here
+    // const [showSuccess, setShowSuccess] = useState(false); // Removed from here
+
     const { id, topic, status, createdAt, student, patient } = consultation;
     const statusLabel = CONSULTATION_STATUS_LABELS[status] || status;
     const statusColor = CONSULTATION_STATUS_COLORS[status] || 'bg-gray-100 text-gray-800 border-gray-300';
@@ -69,46 +82,20 @@ export default function ConsultationCard({ consultation, userRole, onAccept }: C
         ? `${patient.patientProfile.firstName} ${patient.patientProfile.lastName}`
         : 'Unbekannt';
 
-
-    const handleAccept = () => {
-        if (!onAccept) return;
-        setShowSuccess(false); // Reset success state
-
-        startTransition(async () => {
-            try {
-                const result = await onAccept(id);
-                if (result.success) {
-                    setShowSuccess(true); // Show checkmark
-                    // Note: No automatic redirect here, toast is enough feedback.
-                    // The revalidation in the action will update the dashboard list.
-                    setTimeout(() => {
-                         toast.success("Beratung angenommen!", {
-                            description: result.message,
-                         });
-                         // Optionally reset success state if the card doesn't disappear immediately
-                         // setShowSuccess(false);
-                    }, 1200); // Show checkmark briefly
-                } else {
-                     toast.error("Fehler beim Annehmen", {
-                        description: result.message || "Die Beratung konnte nicht angenommen werden.",
-                    });
-                }
-            } catch (error) {
-                 console.error("Error accepting consultation:", error);
-                 toast.error("Fehler beim Annehmen", {
-                     description: "Ein unerwarteter Fehler ist aufgetreten.",
-                 });
-            }
-        });
-    };
-
-    const showAcceptButton = userRole === UserRole.STUDENT && status === ConsultationStatus.REQUESTED && !!onAccept;
+    // Determine if this specific card instance should trigger a preview
+    const isRequestForStudent = userRole === UserRole.STUDENT && status === ConsultationStatus.REQUESTED;
+    const canPreview = isRequestForStudent && onPreviewClick;
 
   return (
      <motion.div variants={cardVariants} initial="hidden" animate="visible">
-        <Card className="group hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex flex-col h-full">
-            {/* ... CardHeader and CardContent ... */}
-             <CardHeader>
+        <Card
+            className={cn(
+                "group hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex flex-col h-full",
+                 canPreview ? "cursor-pointer" : "" // Add cursor pointer if clickable for preview
+                 )}
+            onClick={canPreview ? onPreviewClick : undefined} // Trigger preview on click if applicable
+        >
+            <CardHeader>
                 <div className="flex justify-between items-start gap-2">
                     <CardTitle className="text-lg font-semibold leading-tight">{topic}</CardTitle>
                      <Badge variant="outline" className={cn("whitespace-nowrap border", statusColor)}>
@@ -131,37 +118,41 @@ export default function ConsultationCard({ consultation, userRole, onAccept }: C
                         Student: {studentName}
                     </p>
                 )}
-                 {status === ConsultationStatus.REQUESTED && userRole === UserRole.STUDENT && (
-                     <p className="text-muted-foreground italic">Klicken Sie auf "Annehmen", um diese Anfrage zu bearbeiten.</p>
-                 )}
+                {/* Hint for preview */}
+                {canPreview && (
+                    <p className="text-muted-foreground italic text-xs mt-2">Klicken, um Details zu sehen und anzunehmen.</p>
+                )}
             </CardContent>
             <CardFooter className="flex gap-2">
-                {showAcceptButton ? (
-                     <Button
+                {/* Show Accept button ONLY if showAcceptButton is true AND it's a REQUESTED status */}
+                {showAcceptButton && isRequestForStudent && onAccept ? (
+                    <Button
                         variant="default"
                         size="sm"
                         className="flex-grow"
-                        onClick={handleAccept}
-                        disabled={isPending || showSuccess}
-                        animateInteraction={!isPending && !showSuccess}
+                        onClick={(e) => { e.stopPropagation(); /* TODO: Decide if direct accept from card is needed */ }}
+                        // disabled={isPending || showSuccess} // State now handled in Dialog
+                        animateInteraction
+                        // This button is likely obsolete now with the dialog handling acceptance
                         >
-                         {showSuccess ? (
-                             <AnimatedCheckmark />
-                         ) : isPending ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                         ) : (
-                            <Handshake className="mr-2 h-4 w-4" /> // Original Icon
-                         )}
-                        {!showSuccess && 'Annehmen'}
+                         {/* Simplified icon/text for now */}
+                        <Handshake className="mr-2 h-4 w-4" />
+                        Annehmen (Direct - Remove?)
                     </Button>
-                ) : (
+                ) : !canPreview ? ( // If NOT previewable (e.g., patient view, or student ongoing), show Details
                     <Button variant="outline" size="sm" asChild className="flex-grow">
-                        <Link href={detailLink}>
+                        <Link href={detailLink} onClick={(e) => e.stopPropagation()}> {/* Prevent card click */}
                              Details anzeigen
                             <ArrowRight className="ml-2 h-4 w-4" />
                         </Link>
                     </Button>
-                 )}
+                ) : (
+                     // If it *can* preview, show a subtle indicator instead of a button,
+                     // as the main click action opens the dialog.
+                     <div className='flex items-center justify-end w-full text-xs text-muted-foreground'>
+                         <Eye className='w-4 h-4 mr-1 opacity-70'/> Vorschau anzeigen
+                     </div>
+                )}
             </CardFooter>
         </Card>
      </motion.div>

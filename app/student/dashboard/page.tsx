@@ -3,20 +3,19 @@ import React, { Suspense } from 'react';
 import { auth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { redirect } from 'next/navigation';
-import { Consultation, ConsultationStatus, UserRole } from '@prisma/client';
+import { Consultation, ConsultationStatus, UserRole, Document } from '@prisma/client'; // Added Document type
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// Remove ConsultationCard import if only used within ConsultationsSection
-// import ConsultationCard from '@/components/features/ConsultationCard';
 import { acceptConsultation } from '@/actions/consultations';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, MessageSquare } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"; // Keep card imports
-// Removed motion import
-import ConsultationsSection from '@/components/features/ConsultationsSection'; // <--- Import the new component
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import ConsultationsSection from '@/components/features/ConsultationsSection';
 
-// Define type for consultations fetched for the dashboard (matching the one in the new component file)
+// Update type to include patientQuestion and documents for the preview
 type ConsultationForDashboard = Consultation & {
+    patientQuestion: string; // Ensure this is fetched
+    documents: Document[];   // Ensure documents are fetched
     patient: {
         patientProfile?: {
             firstName: string;
@@ -31,20 +30,29 @@ type ConsultationForDashboard = Consultation & {
     } | null;
 };
 
-// Function to fetch consultations server-side (remains the same)
+// Function to fetch consultations server-side (UPDATED QUERY)
 async function fetchConsultations(studentId: string) {
     try {
          const requestedConsultations = await prisma.consultation.findMany({
             where: { status: ConsultationStatus.REQUESTED },
-            include: { patient: { include: { patientProfile: { select: { firstName: true, lastName: true } } } } },
+            include: {
+                patient: { include: { patientProfile: { select: { firstName: true, lastName: true } } } },
+                documents: true // <<< Include documents for preview
+            },
+            // Select patientQuestion explicitly if not automatically included by default with model
+            // select: { patientQuestion: true, ... }, // Prisma often includes all scalar fields by default
             orderBy: { createdAt: 'asc' },
         });
         const inProgressConsultations = await prisma.consultation.findMany({
             where: { studentId: studentId, status: ConsultationStatus.IN_PROGRESS },
-             include: { patient: { include: { patientProfile: { select: { firstName: true, lastName: true } } } } },
+             include: {
+                patient: { include: { patientProfile: { select: { firstName: true, lastName: true } } } },
+                documents: true // Also include here for consistency if needed later
+             },
             orderBy: { updatedAt: 'desc' },
         });
         return {
+            // Cast to the updated type
             requested: requestedConsultations as ConsultationForDashboard[],
             inProgress: inProgressConsultations as ConsultationForDashboard[],
             error: null
@@ -55,7 +63,7 @@ async function fetchConsultations(studentId: string) {
     }
 }
 
-// Loading Skeleton for Consultation List (remains the same)
+// Loading Skeleton remains the same
 const ConsultationListSkeleton = ({ count = 3 }: { count?: number }) => (
      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
         {[...Array(count)].map((_, index) => (
@@ -77,8 +85,7 @@ const ConsultationListSkeleton = ({ count = 3 }: { count?: number }) => (
     </div>
 );
 
-
-// Main Page Component (Server Component)
+// Main Page Component (Server Component) - No structural changes needed here
 export default async function StudentDashboardPage() {
     const session = await auth();
     if (!session?.user || session.user.role !== UserRole.STUDENT) {
@@ -86,11 +93,12 @@ export default async function StudentDashboardPage() {
     }
     const studentId = session.user.id;
 
+    // Fetch data using the updated function
     const { requested, inProgress, error } = await fetchConsultations(studentId);
 
     if (error) {
          return (
-             <div className="space-y-8">
+             <div className="container mx-auto py-8 space-y-8"> {/* Added container/padding */}
                  <h1 className="text-3xl font-bold tracking-tight">Studenten Dashboard</h1>
                  <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
@@ -102,7 +110,7 @@ export default async function StudentDashboardPage() {
     }
 
     return (
-        <div className="space-y-8">
+        <div className="container mx-auto py-8 space-y-8"> {/* Added container/padding */}
             <h1 className="text-3xl font-bold tracking-tight">Studenten Dashboard</h1>
             <p className="text-muted-foreground">Verwalten Sie Ihre Beratungsanfragen und laufenden Erklärungen.</p>
 
@@ -112,7 +120,6 @@ export default async function StudentDashboardPage() {
                     <TabsTrigger value="laufend">Meine Beratungen ({inProgress.length})</TabsTrigger>
                 </TabsList>
 
-                {/* Removed motion.div wrappers and forceMount */}
                 <TabsContent value="anfragen">
                      <Card>
                          <CardHeader>
@@ -121,11 +128,13 @@ export default async function StudentDashboardPage() {
                          </CardHeader>
                          <CardContent>
                              <Suspense fallback={<ConsultationListSkeleton count={requested.length || 3} />}>
+                                {/* ConsultationsSection now handles the preview dialog */}
                                 <ConsultationsSection
                                     consultations={requested}
                                     userRole={UserRole.STUDENT}
                                     onAccept={acceptConsultation}
                                     emptyMessage="Derzeit gibt es keine offenen Anfragen."
+                                    allowPreview={true} // Add prop to indicate preview is needed
                                 />
                              </Suspense>
                         </CardContent>
@@ -144,6 +153,7 @@ export default async function StudentDashboardPage() {
                                     consultations={inProgress}
                                     userRole={UserRole.STUDENT}
                                     emptyMessage="Sie haben derzeit keine laufenden Beratungen."
+                                    allowPreview={false} // No preview for ongoing consultations
                                 />
                             </Suspense>
                          </CardContent>
