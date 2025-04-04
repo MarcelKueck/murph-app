@@ -5,9 +5,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import Header from "@/components/core/Header";
 import Footer from "@/components/core/Footer";
-// --- CHANGE THIS IMPORT ---
-import { Toaster as SonnerToaster } from "@/components/ui/sonner"; // Import Sonner
-// --- --- ---
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import NextAuthProvider from '@/components/core/NextAuthProvider';
 
 const fontSans = FontSans({
@@ -35,13 +33,13 @@ export default function RootLayout({
       >
         <NextAuthProvider>
           <Header />
-          <main className="flex-grow container mx-auto px-4 py-8">
+           {/* --- Removed container classes from main --- */}
+          <main className="flex-grow">
+          {/* --- Now children pages/layouts control their own width/padding --- */}
             {children}
           </main>
           <Footer />
-          {/* --- REPLACE THIS COMPONENT --- */}
-          <SonnerToaster richColors position="top-right" /> {/* Use Sonner Toaster */}
-          {/* --- --- --- */}
+          <SonnerToaster richColors position="top-right" />
         </NextAuthProvider>
       </body>
     </html>

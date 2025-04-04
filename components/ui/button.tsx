@@ -1,11 +1,10 @@
 // components/ui/button.tsx
-'use client'; // <--- Add this directive at the top
+'use client';
 
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-import { motion } from "framer-motion"; // Import motion
-
+import { motion } from "framer-motion"; // Restore motion import
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -39,12 +38,11 @@ const buttonVariants = cva(
   }
 );
 
-// Define the interface including the new prop
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
-  animateInteraction?: boolean; // New prop for animation
+  animateInteraction?: boolean; // Restore the prop definition
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -54,62 +52,41 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       variant,
       size,
       asChild = false,
-      animateInteraction = false, // Default to false
+      animateInteraction = false, // Restore prop usage
       ...props
     },
     ref
   ) => {
+    // Determine the component type
     const Comp = asChild ? Slot : "button";
 
-    // Common motion props
-    const motionProps = animateInteraction
-      ? {
-          whileHover: { scale: 1.03, transition: { type: "spring", stiffness: 300, damping: 15 } },
-          whileTap: { scale: 0.98 },
-        }
-      : {};
-
-    // Render conditionally based on asChild and animateInteraction
-    if (animateInteraction) {
-      if (asChild) {
-        // If asChild is true, wrap the Slot with motion.span (or motion.div)
-        return (
-          <motion.span
-            {...motionProps}
-            style={{ display: 'inline-block' }} // Keep inline-block for layout consistency
-          >
-            <Slot
-              ref={ref as any}
-              data-slot="button"
-              className={cn(buttonVariants({ variant, size, className }))}
-              {...props}
-            />
-          </motion.span>
-        );
-      } else {
-        // If not asChild, use motion.button
-        const MotionButton = motion.button;
-        return (
-          <MotionButton
-            ref={ref}
-            data-slot="button"
-            className={cn(buttonVariants({ variant, size, className }))}
-            {...motionProps}
-            {...props}
-          />
-        );
-      }
-    } else {
-      // Original rendering without motion
+    if (animateInteraction && !asChild) {
+      // If animation is requested AND it's NOT asChild, render motion.button
+      const MotionButton = motion.button;
       return (
-        <Comp
+        <MotionButton
           ref={ref}
           data-slot="button"
           className={cn(buttonVariants({ variant, size, className }))}
-          {...props}
+          // Apply animation props directly to motion.button
+          whileHover={{ scale: 1.03, transition: { type: "spring", stiffness: 300, damping: 15 } }}
+          whileTap={{ scale: 0.98 }}
+          {...props} // Spread remaining props
         />
       );
     }
+
+    // --- Default Case (including asChild=true OR animateInteraction=false) ---
+    // Render the determined component (Slot or 'button') without motion wrapper here.
+    // The interaction animation won't apply automatically when asChild is true.
+    return (
+      <Comp
+        ref={ref}
+        data-slot="button"
+        className={cn(buttonVariants({ variant, size, className }))}
+        {...props} // Spread remaining props
+      />
+    );
   }
 );
 Button.displayName = "Button";
