@@ -3,19 +3,20 @@ import React, { Suspense } from 'react';
 import { auth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { redirect } from 'next/navigation';
-import { Consultation, ConsultationStatus, UserRole, Document } from '@prisma/client'; // Added Document type
+import { Consultation, ConsultationStatus, UserRole, Document } from '@prisma/client';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { acceptConsultation } from '@/actions/consultations';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, MessageSquare } from 'lucide-react';
+import { AlertCircle, MessageSquare, CheckCheck } from 'lucide-react'; // Added CheckCheck icon
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import ConsultationsSection from '@/components/features/ConsultationsSection';
 
-// Update type to include patientQuestion and documents for the preview
+// Update type to include summary
 type ConsultationForDashboard = Consultation & {
-    patientQuestion: string; // Ensure this is fetched
-    documents: Document[];   // Ensure documents are fetched
+    summary?: string | null; // <<< Add summary
+    patientQuestion: string;
+    documents: Document[];
     patient: {
         patientProfile?: {
             firstName: string;
@@ -30,36 +31,44 @@ type ConsultationForDashboard = Consultation & {
     } | null;
 };
 
-// Function to fetch consultations server-side (UPDATED QUERY)
+// Function to fetch consultations server-side (UPDATED QUERY for completed)
 async function fetchConsultations(studentId: string) {
     try {
          const requestedConsultations = await prisma.consultation.findMany({
             where: { status: ConsultationStatus.REQUESTED },
             include: {
                 patient: { include: { patientProfile: { select: { firstName: true, lastName: true } } } },
-                documents: true // <<< Include documents for preview
+                documents: true
             },
-            // Select patientQuestion explicitly if not automatically included by default with model
-            // select: { patientQuestion: true, ... }, // Prisma often includes all scalar fields by default
             orderBy: { createdAt: 'asc' },
         });
         const inProgressConsultations = await prisma.consultation.findMany({
             where: { studentId: studentId, status: ConsultationStatus.IN_PROGRESS },
              include: {
                 patient: { include: { patientProfile: { select: { firstName: true, lastName: true } } } },
-                documents: true // Also include here for consistency if needed later
+                documents: true
              },
             orderBy: { updatedAt: 'desc' },
         });
+        // <<< Fetch Completed Consultations >>>
+        const completedConsultations = await prisma.consultation.findMany({
+             where: { studentId: studentId, status: ConsultationStatus.COMPLETED },
+             include: {
+                 patient: { include: { patientProfile: { select: { firstName: true, lastName: true } } } },
+                 // Documents usually not needed here, summary is key
+             },
+             orderBy: { updatedAt: 'desc' }, // Order by completion date
+         });
+
         return {
-            // Cast to the updated type
             requested: requestedConsultations as ConsultationForDashboard[],
             inProgress: inProgressConsultations as ConsultationForDashboard[],
+            completed: completedConsultations as ConsultationForDashboard[], // <<< Add completed
             error: null
         };
     } catch (error) {
         console.error("Error fetching student consultations:", error);
-        return { requested: [], inProgress: [], error: "Beratungen konnten nicht geladen werden." };
+        return { requested: [], inProgress: [], completed: [], error: "Beratungen konnten nicht geladen werden." }; // <<< Add completed init
     }
 }
 
@@ -85,7 +94,7 @@ const ConsultationListSkeleton = ({ count = 3 }: { count?: number }) => (
     </div>
 );
 
-// Main Page Component (Server Component) - No structural changes needed here
+// Main Page Component (Server Component)
 export default async function StudentDashboardPage() {
     const session = await auth();
     if (!session?.user || session.user.role !== UserRole.STUDENT) {
@@ -94,11 +103,11 @@ export default async function StudentDashboardPage() {
     const studentId = session.user.id;
 
     // Fetch data using the updated function
-    const { requested, inProgress, error } = await fetchConsultations(studentId);
+    const { requested, inProgress, completed, error } = await fetchConsultations(studentId); // <<< Get completed
 
     if (error) {
          return (
-             <div className="container mx-auto py-8 space-y-8"> {/* Added container/padding */}
+             <div className="container mx-auto py-8 space-y-8">
                  <h1 className="text-3xl font-bold tracking-tight">Studenten Dashboard</h1>
                  <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
@@ -110,14 +119,16 @@ export default async function StudentDashboardPage() {
     }
 
     return (
-        <div className="container mx-auto py-8 space-y-8"> {/* Added container/padding */}
+        <div className="container mx-auto py-8 space-y-8">
             <h1 className="text-3xl font-bold tracking-tight">Studenten Dashboard</h1>
             <p className="text-muted-foreground">Verwalten Sie Ihre Beratungsanfragen und laufenden Erklärungen.</p>
 
              <Tabs defaultValue="anfragen" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 md:w-[400px]">
+                 {/* <<< Update TabsList for 3 columns >>> */}
+                <TabsList className="grid w-full grid-cols-3 md:w-[600px]">
                     <TabsTrigger value="anfragen">Offene Anfragen ({requested.length})</TabsTrigger>
                     <TabsTrigger value="laufend">Meine Beratungen ({inProgress.length})</TabsTrigger>
+                    <TabsTrigger value="abgeschlossen">Abgeschlossen ({completed.length})</TabsTrigger> {/* <<< Add Completed Trigger >>> */}
                 </TabsList>
 
                 <TabsContent value="anfragen">
@@ -128,13 +139,12 @@ export default async function StudentDashboardPage() {
                          </CardHeader>
                          <CardContent>
                              <Suspense fallback={<ConsultationListSkeleton count={requested.length || 3} />}>
-                                {/* ConsultationsSection now handles the preview dialog */}
                                 <ConsultationsSection
                                     consultations={requested}
                                     userRole={UserRole.STUDENT}
                                     onAccept={acceptConsultation}
                                     emptyMessage="Derzeit gibt es keine offenen Anfragen."
-                                    allowPreview={true} // Add prop to indicate preview is needed
+                                    allowPreview={true}
                                 />
                              </Suspense>
                         </CardContent>
@@ -153,7 +163,27 @@ export default async function StudentDashboardPage() {
                                     consultations={inProgress}
                                     userRole={UserRole.STUDENT}
                                     emptyMessage="Sie haben derzeit keine laufenden Beratungen."
-                                    allowPreview={false} // No preview for ongoing consultations
+                                    allowPreview={false}
+                                />
+                            </Suspense>
+                         </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* <<< Add TabsContent for Completed >>> */}
+                <TabsContent value="abgeschlossen">
+                     <Card>
+                         <CardHeader>
+                             <CardTitle>Abgeschlossene Beratungen</CardTitle>
+                             <CardDescription>Eine Übersicht Ihrer abgeschlossenen Erklärungen und Zusammenfassungen.</CardDescription>
+                         </CardHeader>
+                        <CardContent>
+                             <Suspense fallback={<ConsultationListSkeleton count={completed.length || 3} />}>
+                                <ConsultationsSection
+                                    consultations={completed}
+                                    userRole={UserRole.STUDENT}
+                                    emptyMessage="Sie haben noch keine Beratungen abgeschlossen."
+                                    allowPreview={false} // No preview needed here
                                 />
                             </Suspense>
                          </CardContent>
