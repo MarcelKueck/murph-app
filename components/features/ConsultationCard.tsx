@@ -1,7 +1,7 @@
 // components/features/ConsultationCard.tsx
 'use client';
 
-import React, { useTransition } from 'react';
+import React, { useState, useTransition } from 'react'; // Added useState
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import { CONSULTATION_STATUS_LABELS, CONSULTATION_STATUS_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import AnimatedCheckmark from '@/components/ui/AnimatedCheckmark'; // Import the checkmark
 
 type AcceptAction = (consultationId: string) => Promise<{ success: boolean; message: string; error?: any }>;
 
@@ -49,6 +50,7 @@ const cardVariants = {
 
 export default function ConsultationCard({ consultation, userRole, onAccept }: ConsultationCardProps) {
     const [isPending, startTransition] = useTransition();
+    const [showSuccess, setShowSuccess] = useState(false); // State for success animation
     const { id, topic, status, createdAt, student, patient } = consultation;
     const statusLabel = CONSULTATION_STATUS_LABELS[status] || status;
     const statusColor = CONSULTATION_STATUS_COLORS[status] || 'bg-gray-100 text-gray-800 border-gray-300';
@@ -70,14 +72,22 @@ export default function ConsultationCard({ consultation, userRole, onAccept }: C
 
     const handleAccept = () => {
         if (!onAccept) return;
+        setShowSuccess(false); // Reset success state
 
         startTransition(async () => {
             try {
                 const result = await onAccept(id);
                 if (result.success) {
-                    toast.success("Beratung angenommen!", {
-                        description: result.message,
-                    });
+                    setShowSuccess(true); // Show checkmark
+                    // Note: No automatic redirect here, toast is enough feedback.
+                    // The revalidation in the action will update the dashboard list.
+                    setTimeout(() => {
+                         toast.success("Beratung angenommen!", {
+                            description: result.message,
+                         });
+                         // Optionally reset success state if the card doesn't disappear immediately
+                         // setShowSuccess(false);
+                    }, 1200); // Show checkmark briefly
                 } else {
                      toast.error("Fehler beim Annehmen", {
                         description: result.message || "Die Beratung konnte nicht angenommen werden.",
@@ -96,9 +106,9 @@ export default function ConsultationCard({ consultation, userRole, onAccept }: C
 
   return (
      <motion.div variants={cardVariants} initial="hidden" animate="visible">
-        {/* Add group class for potential group-hover usage if needed later */}
         <Card className="group hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex flex-col h-full">
-            <CardHeader>
+            {/* ... CardHeader and CardContent ... */}
+             <CardHeader>
                 <div className="flex justify-between items-start gap-2">
                     <CardTitle className="text-lg font-semibold leading-tight">{topic}</CardTitle>
                      <Badge variant="outline" className={cn("whitespace-nowrap border", statusColor)}>
@@ -121,7 +131,6 @@ export default function ConsultationCard({ consultation, userRole, onAccept }: C
                         Student: {studentName}
                     </p>
                 )}
-                 {/* Add placeholder content if needed */}
                  {status === ConsultationStatus.REQUESTED && userRole === UserRole.STUDENT && (
                      <p className="text-muted-foreground italic">Klicken Sie auf "Annehmen", um diese Anfrage zu bearbeiten.</p>
                  )}
@@ -133,15 +142,17 @@ export default function ConsultationCard({ consultation, userRole, onAccept }: C
                         size="sm"
                         className="flex-grow"
                         onClick={handleAccept}
-                        disabled={isPending}
-                        animateInteraction
+                        disabled={isPending || showSuccess}
+                        animateInteraction={!isPending && !showSuccess}
                         >
-                        {isPending ? (
+                         {showSuccess ? (
+                             <AnimatedCheckmark />
+                         ) : isPending ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                            <Handshake className="mr-2 h-4 w-4" />
-                        )}
-                        Annehmen
+                         ) : (
+                            <Handshake className="mr-2 h-4 w-4" /> // Original Icon
+                         )}
+                        {!showSuccess && 'Annehmen'}
                     </Button>
                 ) : (
                     <Button variant="outline" size="sm" asChild className="flex-grow">

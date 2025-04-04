@@ -26,12 +26,14 @@ import { createConsultation, ConsultationActionResult } from '@/actions/consulta
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import TrustBadge from '@/components/core/TrustBadge'; // Re-use TrustBadge
 import { LockKeyhole, ShieldCheck } from 'lucide-react';
+import AnimatedCheckmark from '@/components/ui/AnimatedCheckmark'; // Import the checkmark
 
 type FormData = z.infer<typeof ConsultationRequestSchema>;
 
 export default function ConsultationRequestForm() {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
+    const [showSuccess, setShowSuccess] = useState(false); // State for success animation
     const [uploadedFiles, setUploadedFiles] = useState<UploadedDocument[]>([]); // State to hold completed uploads
 
     const form = useForm<FormData>({
@@ -42,7 +44,6 @@ export default function ConsultationRequestForm() {
         },
     });
 
-     // --- File Upload Callbacks ---
     const handleUploadComplete = (uploadedFile: UploadedDocument) => {
         setUploadedFiles((prevFiles) => [...prevFiles, uploadedFile]);
         toast.success(`Datei "${uploadedFile.fileName}" erfolgreich hochgeladen.`);
@@ -55,17 +56,20 @@ export default function ConsultationRequestForm() {
      const handleFileRemove = (uploadId: string) => {
         setUploadedFiles((prevFiles) => prevFiles.filter(file => file.uploadId !== uploadId));
      };
-     // --- ---
 
     const onSubmit = (values: FormData) => {
+        setShowSuccess(false); // Reset success state
         startTransition(async () => {
             const result: ConsultationActionResult = await createConsultation(values, uploadedFiles);
 
             if (result.success) {
-                toast.success("Anfrage gesendet!", { description: result.message });
-                // Redirect to dashboard after successful submission
-                router.push('/patient/dashboard');
-                // No need for router.refresh() here due to revalidatePath in action
+                 setShowSuccess(true); // Show checkmark
+                 setTimeout(() => {
+                    toast.success("Anfrage gesendet!", { description: result.message });
+                    // Redirect to dashboard after successful submission
+                    router.push('/patient/dashboard');
+                    // No need for router.refresh() here due to revalidatePath in action
+                 }, 1200); // Delay redirect
             } else {
                 toast.error("Fehler beim Senden", {
                     description: result.message || "Bitte überprüfen Sie Ihre Eingaben.",
@@ -114,7 +118,7 @@ export default function ConsultationRequestForm() {
                                 <FormItem>
                                     <FormLabel>Thema / Betreff</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="z.B. Erklärung Blutwerte, Frage zu MRT-Befund" {...field} disabled={isPending} />
+                                        <Input placeholder="z.B. Erklärung Blutwerte, Frage zu MRT-Befund" {...field} disabled={isPending || showSuccess} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -132,7 +136,7 @@ export default function ConsultationRequestForm() {
                                             placeholder="Beschreiben Sie hier detailliert Ihre Frage oder das Thema, zu dem Sie eine Erklärung wünschen..."
                                             className="min-h-[150px] resize-y" // Allow vertical resize
                                             {...field}
-                                             disabled={isPending}
+                                             disabled={isPending || showSuccess}
                                         />
                                     </FormControl>
                                      <FormDescription>
@@ -150,7 +154,7 @@ export default function ConsultationRequestForm() {
                              onUploadError={handleUploadError}
                              onFileRemove={handleFileRemove}
                              currentFileCount={uploadedFiles.length}
-                             disabled={isPending}
+                             disabled={isPending || showSuccess}
                          />
 
                           {/* Display Successfully Uploaded Files */}
@@ -171,7 +175,7 @@ export default function ConsultationRequestForm() {
                                             size="sm"
                                             className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
                                             onClick={() => handleFileRemove(file.uploadId)}
-                                            disabled={isPending}
+                                            disabled={isPending || showSuccess}
                                             aria-label="Datei entfernen"
                                         >
                                             <X className="h-4 w-4" />
@@ -182,11 +186,21 @@ export default function ConsultationRequestForm() {
                             </div>
                          )}
 
-
-                        <Button type="submit" className="w-full" disabled={isPending}>
-                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Beratung anfordern
+                        {/* --- Modify Submit Button --- */}
+                        <Button
+                            type="submit"
+                            className="w-full"
+                            disabled={isPending || showSuccess}
+                            animateInteraction={!isPending && !showSuccess}
+                        >
+                             {showSuccess ? (
+                                <AnimatedCheckmark />
+                            ) : isPending ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : null}
+                            {!showSuccess && 'Beratung anfordern'}
                         </Button>
+                         {/* --- --- */}
                     </form>
                 </Form>
             </CardContent>

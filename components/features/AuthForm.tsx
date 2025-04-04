@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { LoginSchema, RegisterSchema } from '@/lib/validation';
-import { Button } from '@/components/ui/button'; // Ensure Button is imported
+import { Button } from '@/components/ui/button';
 import {
     Form,
     FormControl,
@@ -14,7 +14,7 @@ import {
     FormItem,
     FormLabel,
     FormMessage,
-    FormDescription, // Optional
+    FormDescription,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -23,13 +23,14 @@ import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { de } from 'date-fns/locale'; // German locale for date picker
+import { de } from 'date-fns/locale';
 import Link from 'next/link';
-import { toast } from "sonner"; // Using sonner for toasts
-import { registerUser, RegistrationResult } from '@/actions/auth'; // Import Server Action
-import { signIn } from 'next-auth/react'; // Import signIn for login
+import { toast } from "sonner";
+import { registerUser, RegistrationResult } from '@/actions/auth';
+import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { UserRole } from '@prisma/client';
+import AnimatedCheckmark from '@/components/ui/AnimatedCheckmark';
 
 interface AuthFormProps {
     mode: 'login' | 'register';
@@ -40,10 +41,12 @@ type FormData = z.infer<typeof LoginSchema> | z.infer<typeof RegisterSchema>;
 export default function AuthForm({ mode }: AuthFormProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const callbackUrl = searchParams.get('callbackUrl') || '/'; // Default redirect after login
+    // We still read callbackUrl, as it's needed if user was redirected *to* login
+    const callbackUrl = searchParams.get('callbackUrl') || '/';
 
     const [isPending, startTransition] = useTransition();
-    const [showStudentFields, setShowStudentFields] = useState(false); // Control visibility
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [showStudentFields, setShowStudentFields] = useState(false);
 
     const currentSchema = mode === 'login' ? LoginSchema : RegisterSchema;
 
@@ -57,32 +60,31 @@ export default function AuthForm({ mode }: AuthFormProps) {
                 email: '',
                 password: '',
                 confirmPassword: '',
-                role: undefined, // Start with no role selected
+                role: undefined,
                 dob: undefined,
                 university: '',
                 clinicalYear: undefined,
             },
     });
 
-    const selectedRole = form.watch('role'); // Watch role field for conditional rendering
+    const selectedRole = form.watch('role');
 
-    // Update student fields visibility when role changes
     React.useEffect(() => {
         if (mode === 'register') {
             setShowStudentFields(selectedRole === UserRole.STUDENT);
         }
     }, [selectedRole, mode, form]);
 
-
     const onSubmit = (values: FormData) => {
+        setShowSuccess(false);
         startTransition(async () => {
             if (mode === 'login') {
-                // --- Login Logic ---
                 try {
                     const result = await signIn('credentials', {
-                        redirect: false, // Handle redirect manually
+                        redirect: false, // Keep this false
                         email: (values as z.infer<typeof LoginSchema>).email,
                         password: (values as z.infer<typeof LoginSchema>).password,
+                        // No explicit callbackUrl needed here for signIn itself
                     });
 
                     if (result?.error) {
@@ -90,9 +92,14 @@ export default function AuthForm({ mode }: AuthFormProps) {
                             description: "Ungültige E-Mail oder Passwort.",
                         });
                     } else if (result?.ok) {
-                        toast.success("Anmeldung erfolgreich!");
-                        router.push(callbackUrl);
-                        router.refresh(); // Refresh server components
+                        setShowSuccess(true); // Show checkmark
+                        toast.success("Anmeldung erfolgreich!"); // Show toast immediately
+
+                        // --- CHANGE HERE: Refresh instead of push ---
+                        // Let middleware handle redirect on refresh based on new session
+                        router.refresh();
+                        // No need for setTimeout delay anymore, refresh will trigger navigation
+
                     } else {
                          toast.error("Anmeldung fehlgeschlagen", {
                             description: "Ein unbekannter Fehler ist aufgetreten.",
@@ -105,15 +112,17 @@ export default function AuthForm({ mode }: AuthFormProps) {
                     });
                 }
 
-            } else {
-                // --- Registration Logic ---
+            } else { // Registration logic remains the same
                 const result: RegistrationResult = await registerUser(values as z.infer<typeof RegisterSchema>);
 
                 if (result.success) {
-                    toast.success("Registrierung erfolgreich!", {
-                        description: result.message,
-                    });
-                    router.push('/login');
+                    setShowSuccess(true);
+                     setTimeout(() => {
+                        toast.success("Registrierung erfolgreich!", {
+                            description: result.message,
+                        });
+                        router.push('/login');
+                     }, 1200);
                 } else {
                     toast.error("Registrierung fehlgeschlagen", {
                         description: result.message || "Bitte überprüfen Sie Ihre Eingaben.",
@@ -136,7 +145,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
     return (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                {mode === 'register' && (
+                {/* ... rest of the form fields ... */}
+                 {mode === 'register' && (
                     <>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <FormField
@@ -146,7 +156,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                     <FormItem>
                                         <FormLabel>Vorname</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Max" {...field} disabled={isPending} />
+                                            <Input placeholder="Max" {...field} disabled={isPending || showSuccess} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -159,7 +169,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                     <FormItem>
                                         <FormLabel>Nachname</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Mustermann" {...field} disabled={isPending} />
+                                            <Input placeholder="Mustermann" {...field} disabled={isPending || showSuccess} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -177,7 +187,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                     onValueChange={field.onChange}
                                     defaultValue={field.value}
                                     className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4"
-                                    disabled={isPending}
+                                    disabled={isPending || showSuccess}
                                     >
                                     <FormItem className="flex items-center space-x-3 space-y-0">
                                         <FormControl>
@@ -210,16 +220,16 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                         <PopoverTrigger asChild>
                                         <FormControl>
                                             <Button
-                                                type="button" // Prevent form submission on Popover trigger click
+                                                type="button"
                                                 variant={"outline"}
                                                 className={cn(
                                                     "w-[240px] pl-3 text-left font-normal",
                                                     !field.value && "text-muted-foreground"
                                                 )}
-                                                disabled={isPending}
+                                                disabled={isPending || showSuccess}
                                                 >
                                                 {field.value ? (
-                                                    format(field.value, "PPP", { locale: de }) // Use German format
+                                                    format(field.value, "PPP", { locale: de })
                                                 ) : (
                                                     <span>Wähle ein Datum</span>
                                                 )}
@@ -230,16 +240,16 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                         <PopoverContent className="w-auto p-0" align="start">
                                         <Calendar
                                             mode="single"
-                                            selected={field.value ?? undefined} // Handle null/undefined for Calendar
+                                            selected={field.value ?? undefined}
                                             onSelect={field.onChange}
                                             disabled={(date) =>
-                                                date > new Date() || date < new Date("1900-01-01") || isPending
+                                                date > new Date() || date < new Date("1900-01-01") || isPending || showSuccess
                                             }
                                             initialFocus
-                                            captionLayout="dropdown-buttons" // Easier year/month nav
+                                            captionLayout="dropdown-buttons"
                                             fromYear={1920}
                                             toYear={new Date().getFullYear()}
-                                            locale={de} // German locale
+                                            locale={de}
                                         />
                                         </PopoverContent>
                                     </Popover>
@@ -259,7 +269,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                         <FormItem>
                                             <FormLabel>Universität</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="z.B. LMU München" {...field} disabled={isPending} />
+                                                <Input placeholder="z.B. LMU München" {...field} disabled={isPending || showSuccess} />
                                             </FormControl>
                                              <FormDescription>Bitte geben Sie den offiziellen Namen Ihrer Universität an.</FormDescription>
                                             <FormMessage />
@@ -273,7 +283,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                         <FormItem>
                                             <FormLabel>Klinisches Semester / Studienjahr</FormLabel>
                                             <FormControl>
-                                                <Input type="number" placeholder="z.B. 3" {...field} onChange={event => field.onChange(+event.target.value)} disabled={isPending} />
+                                                <Input type="number" placeholder="z.B. 3" {...field} onChange={event => field.onChange(+event.target.value)} disabled={isPending || showSuccess} />
                                             </FormControl>
                                              <FormDescription>In welchem klinischen Jahr/Semester sind Sie?</FormDescription>
                                             <FormMessage />
@@ -282,7 +292,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                                 />
                             </>
                         )}
-                    </> // End register-specific fields fragment
+                    </>
                 )}
 
                 <FormField
@@ -292,7 +302,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                         <FormItem>
                             <FormLabel>E-Mail</FormLabel>
                             <FormControl>
-                                <Input type="email" placeholder="name@beispiel.de" {...field} disabled={isPending} />
+                                <Input type="email" placeholder="name@beispiel.de" {...field} disabled={isPending || showSuccess} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -305,7 +315,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                         <FormItem>
                             <FormLabel>Passwort</FormLabel>
                             <FormControl>
-                                <Input type="password" placeholder="********" {...field} disabled={isPending} />
+                                <Input type="password" placeholder="********" {...field} disabled={isPending || showSuccess} />
                             </FormControl>
                              {mode === 'register' && <FormDescription>Mindestens 8 Zeichen.</FormDescription>}
                             <FormMessage />
@@ -320,7 +330,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                             <FormItem>
                                 <FormLabel>Passwort bestätigen</FormLabel>
                                 <FormControl>
-                                    <Input type="password" placeholder="********" {...field} disabled={isPending} />
+                                    <Input type="password" placeholder="********" {...field} disabled={isPending || showSuccess} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -328,7 +338,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
                     />
                 )}
 
-                {/* Add Forgot Password link for login */}
                  {mode === 'login' && (
                     <div className="text-right">
                         <Button type="button" variant="link" size="sm" asChild className="font-normal px-0">
@@ -337,14 +346,20 @@ export default function AuthForm({ mode }: AuthFormProps) {
                     </div>
                 )}
 
-                {/* --- Add animateInteraction prop --- */}
-                <Button type="submit" className="w-full" disabled={isPending} animateInteraction>
-                    {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {mode === 'login' ? 'Anmelden' : 'Registrieren'}
+                <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isPending || showSuccess}
+                    animateInteraction={!isPending && !showSuccess}
+                >
+                    {showSuccess ? (
+                        <AnimatedCheckmark />
+                    ) : isPending ? (
+                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    {!showSuccess && (mode === 'login' ? 'Anmelden' : 'Registrieren')}
                 </Button>
-                {/* --- --- */}
 
-                 {/* Switch between Login/Register */}
                  <div className="text-center text-sm text-muted-foreground">
                     {mode === 'login' ? (
                         <>
@@ -362,7 +377,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
                         </>
                     )}
                 </div>
-                 {/* Optional: Add legal text/checkboxes for registration */}
                  {mode === 'register' && (
                      <p className="text-xs text-center text-muted-foreground pt-4">
                         Mit der Registrierung stimmen Sie unseren{' '}

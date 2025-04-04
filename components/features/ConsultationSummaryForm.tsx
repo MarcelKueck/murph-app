@@ -19,9 +19,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from 'next/navigation';
-import { completeConsultation, ConsultationActionResult } from '@/actions/consultations'; // Need to create this action
+import { completeConsultation, ConsultationActionResult } from '@/actions/consultations';
+import AnimatedCheckmark from '@/components/ui/AnimatedCheckmark'; // Import the checkmark
 
-// Validation Schema for the summary
 const SummarySchema = z.object({
   summary: z.string()
     .trim()
@@ -32,12 +32,13 @@ type SummaryFormData = z.infer<typeof SummarySchema>;
 
 interface ConsultationSummaryFormProps {
   consultationId: string;
-  initialSummary?: string | null; // Pre-fill if summary exists but wasn't completed
+  initialSummary?: string | null;
 }
 
 export default function ConsultationSummaryForm({ consultationId, initialSummary }: ConsultationSummaryFormProps) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
+    const [showSuccess, setShowSuccess] = useState(false); // State for success animation
 
     const form = useForm<SummaryFormData>({
         resolver: zodResolver(SummarySchema),
@@ -47,20 +48,20 @@ export default function ConsultationSummaryForm({ consultationId, initialSummary
     });
 
     const onSubmit = (values: SummaryFormData) => {
+        setShowSuccess(false); // Reset success state
         startTransition(async () => {
-            // Call server action to save summary and complete consultation
             const result: ConsultationActionResult = await completeConsultation(consultationId, values.summary);
 
              if (result.success) {
-                toast.success("Beratung abgeschlossen!", { description: result.message });
-                // Redirect to dashboard after successful completion
-                router.push('/student/dashboard');
-                // Revalidation should happen in the server action
+                 setShowSuccess(true); // Show checkmark
+                 setTimeout(() => {
+                    toast.success("Beratung abgeschlossen!", { description: result.message });
+                    router.push('/student/dashboard');
+                 }, 1200); // Delay redirect
             } else {
                 toast.error("Fehler beim Abschließen", {
                     description: result.message || "Die Beratung konnte nicht abgeschlossen werden.",
                 });
-                 // Handle field errors if returned (though unlikely for just a textarea)
                  if (result.fieldErrors?.summary) {
                      form.setError("summary", { type: 'server', message: result.fieldErrors.summary.join(', ') });
                  }
@@ -82,21 +83,30 @@ export default function ConsultationSummaryForm({ consultationId, initialSummary
                                     placeholder="Fassen Sie hier die wesentlichen Punkte Ihrer Erklärung zusammen..."
                                     className="min-h-[100px] resize-y"
                                     {...field}
-                                    disabled={isPending}
+                                    disabled={isPending || showSuccess}
                                 />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
                     )}
                 />
-                <Button type="submit" className="w-full sm:w-auto" disabled={isPending}>
-                    {isPending ? (
+                 {/* --- Modify Submit Button --- */}
+                <Button
+                    type="submit"
+                    className="w-full sm:w-auto"
+                    disabled={isPending || showSuccess}
+                    animateInteraction={!isPending && !showSuccess}
+                >
+                    {showSuccess ? (
+                        <AnimatedCheckmark />
+                    ) : isPending ? (
                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
-                        <CheckCircle className="mr-2 h-4 w-4" />
+                        <CheckCircle className="mr-2 h-4 w-4" /> // Original Icon for idle state
                     )}
-                    Zusammenfassung speichern & Beratung abschließen
+                    {!showSuccess && 'Zusammenfassung speichern & Beratung abschließen'}
                 </Button>
+                 {/* --- --- */}
             </form>
         </Form>
     );

@@ -87,6 +87,7 @@ export default function LandingPage() {
               variants={fadeInUpVariants}
               className="flex flex-col sm:flex-row justify-center gap-4"
             >
+              {/* Apply animateInteraction to Hero buttons */}
               <Link href="/registrieren?role=PATIENT">
                 <Button size="lg" animateInteraction>
                   Für Patienten
@@ -327,6 +328,7 @@ export default function LandingPage() {
             Registrieren Sie sich jetzt kostenlos als Patient oder werden Sie Teil unseres Teams als Medizinstudent.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
+            {/* animateInteraction already present */}
             <Link href="/registrieren?role=PATIENT">
               <Button size="lg" animateInteraction>
                 Jetzt als Patient starten <ArrowRight className="ml-2 h-5 w-5"/>

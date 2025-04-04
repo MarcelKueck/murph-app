@@ -1,15 +1,14 @@
 // components/features/ConsultationsSection.tsx
-'use client'; // <--- Add directive here
+'use client';
 
 import React from 'react';
 import { motion } from 'framer-motion';
 import ConsultationCard from './ConsultationCard';
 import { MessageSquare } from 'lucide-react';
-import { Consultation, ConsultationStatus, UserRole } from '@prisma/client'; // Import necessary types
+import { Consultation, UserRole } from '@prisma/client'; // Import necessary types
 import { acceptConsultation } from '@/actions/consultations'; // Import action type if needed
 
 // Define type for consultation data passed as props
-// Ensure it includes necessary nested profile data for the Card
 type ConsultationForDashboard = Consultation & {
     patient: {
         patientProfile?: {
@@ -17,7 +16,7 @@ type ConsultationForDashboard = Consultation & {
             lastName: string;
         } | null;
     } | null;
-    student?: { // Include student relation if needed
+    student?: {
         studentProfile?: {
             firstName: string;
             lastName: string;
@@ -33,19 +32,22 @@ interface ConsultationsSectionProps {
     emptyMessage?: string;
 }
 
-// Animation variants
-const listVariants = {
+// Combined variants for container and items
+const listContainerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
     transition: {
+      // Stagger children when the container becomes visible
       staggerChildren: 0.1,
-      delayChildren: 0.1,
+      delayChildren: 0.1, // Optional delay before starting stagger
     },
   },
 };
 
-// The actual Client Component
+// Note: Card variants are now defined *within* ConsultationCard.tsx
+// We just need to ensure the parent (this component) triggers the 'visible' state.
+
 const ConsultationsSection: React.FC<ConsultationsSectionProps> = ({
     consultations,
     userRole,
@@ -64,15 +66,21 @@ const ConsultationsSection: React.FC<ConsultationsSectionProps> = ({
     return (
         <motion.div
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6"
-            variants={listVariants}
+            // Use the container variants
+            variants={listContainerVariants}
+            // Start hidden
             initial="hidden"
-            animate="visible"
+            // Animate to visible when the component scrolls into view
+            whileInView="visible"
+            // Trigger animation only once when it enters the viewport
+            viewport={{ once: true, amount: 0.1 }} // Adjust amount (0 to 1) for when to trigger
         >
             {consultations.map((consultation) => (
+                // ConsultationCard already uses motion.div and variants,
+                // they will inherit the "visible" state from the parent container's animation control.
                 <ConsultationCard
                     key={consultation.id}
-                    // Make sure the passed consultation object matches the type expected by ConsultationCard
-                    consultation={consultation as any} // Use 'as any' for now or refine types
+                    consultation={consultation as any}
                     userRole={userRole}
                     onAccept={onAccept}
                 />

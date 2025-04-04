@@ -3,36 +3,35 @@ import NextAuth from 'next-auth';
 import { authConfig } from './auth.config'; // Import the Edge-compatible config
 
 // Use the imported config to initialize NextAuth for middleware.
-// The logic for protection and redirection is now primarily handled
-// by the `authorized` callback within `authConfig`.
 export default NextAuth(authConfig).auth;
 
 // The config.matcher defines which routes are processed by the middleware.
-// This remains unchanged.
 export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
+     * - api (API routes - usually handled separately or require different auth checks)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - /login (login page)
-     * - /registrieren (registration page)
-     * - /images (public images)
-     * - /svgs (public svgs)
-     * - / (root - although it will be matched by the next pattern if not excluded)
-     * The negative lookahead `(?!...)` handles exclusions.
-     * The `$` at the end prevents matching just `/`.
+     * - images (public images folder)
+     * - svgs (public svgs folder)
+     *
+     * IMPORTANT: We REMOVE /login and /registrieren from the negative lookahead
+     * so the middleware runs on these pages. The `authorized` callback
+     * contains the logic to allow/redirect based on auth status.
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|login|registrieren|images|svgs).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|images|svgs).*)',
 
     /*
-     * Explicitly match protected route groups after the general pattern.
-     * This ensures they are definitely covered even if the regex above is slightly imperfect
-     * or if you want to be very clear about protected areas.
+     * Explicitly including protected routes and auth pages might be redundant
+     * with the pattern above now, but serves as clear documentation and ensures
+     * these paths are covered if the regex has unintended gaps.
+     * It's generally safe to keep them.
      */
      '/patient/:path*',
      '/student/:path*',
+     '/login',
+     '/registrieren',
   ],
 };

@@ -3,7 +3,7 @@ import React, { Suspense } from 'react';
 import { auth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { redirect } from 'next/navigation';
-import { Consultation, ConsultationStatus, UserRole } from '@prisma/client'; // Keep types
+import { Consultation, ConsultationStatus, UserRole } from '@prisma/client';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 // Remove ConsultationCard import if only used within ConsultationsSection
 // import ConsultationCard from '@/components/features/ConsultationCard';
@@ -12,8 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, MessageSquare } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"; // Keep card imports
-// Remove motion import if no longer used directly here
-// import { motion } from 'framer-motion';
+// Removed motion import
 import ConsultationsSection from '@/components/features/ConsultationsSection'; // <--- Import the new component
 
 // Define type for consultations fetched for the dashboard (matching the one in the new component file)
@@ -113,6 +112,7 @@ export default async function StudentDashboardPage() {
                     <TabsTrigger value="laufend">Meine Beratungen ({inProgress.length})</TabsTrigger>
                 </TabsList>
 
+                {/* Removed motion.div wrappers and forceMount */}
                 <TabsContent value="anfragen">
                      <Card>
                          <CardHeader>
@@ -121,7 +121,6 @@ export default async function StudentDashboardPage() {
                          </CardHeader>
                          <CardContent>
                              <Suspense fallback={<ConsultationListSkeleton count={requested.length || 3} />}>
-                                {/* Use the imported Client Component */}
                                 <ConsultationsSection
                                     consultations={requested}
                                     userRole={UserRole.STUDENT}
@@ -141,7 +140,6 @@ export default async function StudentDashboardPage() {
                          </CardHeader>
                         <CardContent>
                              <Suspense fallback={<ConsultationListSkeleton count={inProgress.length || 3} />}>
-                                {/* Use the imported Client Component */}
                                 <ConsultationsSection
                                     consultations={inProgress}
                                     userRole={UserRole.STUDENT}
