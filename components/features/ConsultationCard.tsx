@@ -6,11 +6,11 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Clock, Loader2, User, Users, Handshake } from "lucide-react"; // Added Handshake
+import { ArrowRight, Clock, Loader2, User, Users, Handshake } from "lucide-react";
 import { ConsultationStatus, User as PrismaUser, UserRole } from '@prisma/client';
 import { formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { motion } from 'framer-motion'; // Keep motion import
+import { motion } from 'framer-motion';
 import { CONSULTATION_STATUS_LABELS, CONSULTATION_STATUS_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -42,7 +42,6 @@ interface ConsultationCardProps {
   onAccept?: AcceptAction;
 }
 
-// Define variants for card entrance animation
 const cardVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } }
@@ -95,10 +94,10 @@ export default function ConsultationCard({ consultation, userRole, onAccept }: C
 
     const showAcceptButton = userRole === UserRole.STUDENT && status === ConsultationStatus.REQUESTED && !!onAccept;
 
-  // Use motion.div with variants for the entrance animation
   return (
      <motion.div variants={cardVariants} initial="hidden" animate="visible">
-        <Card className="hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex flex-col h-full"> {/* Added hover effect */}
+        {/* Add group class for potential group-hover usage if needed later */}
+        <Card className="group hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex flex-col h-full">
             <CardHeader>
                 <div className="flex justify-between items-start gap-2">
                     <CardTitle className="text-lg font-semibold leading-tight">{topic}</CardTitle>
@@ -122,6 +121,10 @@ export default function ConsultationCard({ consultation, userRole, onAccept }: C
                         Student: {studentName}
                     </p>
                 )}
+                 {/* Add placeholder content if needed */}
+                 {status === ConsultationStatus.REQUESTED && userRole === UserRole.STUDENT && (
+                     <p className="text-muted-foreground italic">Klicken Sie auf "Annehmen", um diese Anfrage zu bearbeiten.</p>
+                 )}
             </CardContent>
             <CardFooter className="flex gap-2">
                 {showAcceptButton ? (
@@ -131,7 +134,7 @@ export default function ConsultationCard({ consultation, userRole, onAccept }: C
                         className="flex-grow"
                         onClick={handleAccept}
                         disabled={isPending}
-                        animateInteraction // --- Apply animation prop ---
+                        animateInteraction
                         >
                         {isPending ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

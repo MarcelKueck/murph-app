@@ -7,6 +7,8 @@ import Header from "@/components/core/Header";
 import Footer from "@/components/core/Footer";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import NextAuthProvider from '@/components/core/NextAuthProvider';
+// Import the new wrapper
+import PageTransitionWrapper from "@/components/core/PageTransitionWrapper";
 
 const fontSans = FontSans({
   subsets: ["latin"],
@@ -33,11 +35,11 @@ export default function RootLayout({
       >
         <NextAuthProvider>
           <Header />
-           {/* --- Removed container classes from main --- */}
-          <main className="flex-grow">
-          {/* --- Now children pages/layouts control their own width/padding --- */}
+          {/* Use the PageTransitionWrapper around the children */}
+          {/* Pass the flex-grow class to the wrapper */}
+          <PageTransitionWrapper className="flex-grow">
             {children}
-          </main>
+          </PageTransitionWrapper>
           <Footer />
           <SonnerToaster richColors position="top-right" />
         </NextAuthProvider>
