@@ -28,6 +28,7 @@ async function getConsultationData(consultationId: string, userId: string) {
                 select: {
                   id: true,
                   role: true,
+                  image: true, // <<< Include sender image
                   patientProfile: { select: { firstName: true, lastName: true } },
                   studentProfile: { select: { firstName: true, lastName: true } },
                 }
@@ -44,7 +45,6 @@ async function getConsultationData(consultationId: string, userId: string) {
                   }
               }
           },
-          // Summary is a scalar field, fetched by default
         }
       });
       return consultation;
@@ -57,7 +57,6 @@ async function getConsultationData(consultationId: string, userId: string) {
 
 // The main Server Component for the page
 export default async function PatientConsultationDetailPage({ params }: { params: { consultationId: string } }) {
-  // ---- Data Fetching and Authorization ----
   const session = await auth();
   const { consultationId } = await params;
 
@@ -71,10 +70,7 @@ export default async function PatientConsultationDetailPage({ params }: { params
   if (!consultation) {
     notFound();
   }
-  // ---- End Data Fetching and Authorization ----
 
-
-  // ---- Data Preparation for Client Component ----
   const initialMessages = consultation.messages.map(msg => {
      const senderProfile = msg.sender.role === UserRole.PATIENT
         ? msg.sender.patientProfile
@@ -88,6 +84,7 @@ export default async function PatientConsultationDetailPage({ params }: { params
             role: msg.sender.role,
             firstName: senderProfile?.firstName ?? 'Nutzer',
             lastName: senderProfile?.lastName ?? '',
+            image: msg.sender.image, // <<< Pass sender image
         }
     };
   });
@@ -104,10 +101,7 @@ export default async function PatientConsultationDetailPage({ params }: { params
     ? `${consultation.student.studentProfile.firstName} ${consultation.student.studentProfile.lastName}`
     : 'Wird zugewiesen...';
   const studentUniversity = consultation.student?.studentProfile?.university ?? '';
-  // ---- End Data Preparation ----
 
-
-  // ---- Render Page UI ----
   return (
     <div className="container mx-auto py-8 space-y-6">
        <div className="flex items-center justify-between mb-4">
@@ -119,7 +113,6 @@ export default async function PatientConsultationDetailPage({ params }: { params
             </Button>
         </div>
 
-      {/* Main Card containing the Chat Interface */}
       <Card className="flex flex-col overflow-hidden">
         <CardHeader>
           <CardTitle className="text-2xl">Beratung: {consultation.topic}</CardTitle>
@@ -128,7 +121,6 @@ export default async function PatientConsultationDetailPage({ params }: { params
                     ? `Ihre Erklärung von: ${studentName} (${studentUniversity})`
                     : 'Ihre Anfrage wartet auf die Zuweisung eines Studenten.'
                 }
-                 {/* Display status clearly */}
                  <span className={cn("ml-2 px-2 py-0.5 rounded text-xs font-medium border",
                      CONSULTATION_STATUS_COLORS[consultation.status] || 'bg-gray-100 text-gray-800 border-gray-300'
                  )}>
@@ -140,14 +132,13 @@ export default async function PatientConsultationDetailPage({ params }: { params
           <ChatInterface
             consultationId={consultation.id}
             currentUserId={userId}
-            initialMessages={initialMessages}
+            initialMessages={initialMessages} // <<< Pass updated initialMessages
             initialDocuments={initialDocuments}
             consultationStatus={consultation.status}
           />
         </CardContent>
       </Card>
 
-       {/* <<< Display Summary Card (Only render if Completed and Summary exists) >>> */}
        {consultation.status === ConsultationStatus.COMPLETED && consultation.summary && (
            <Card>
                <CardHeader>
@@ -161,8 +152,6 @@ export default async function PatientConsultationDetailPage({ params }: { params
                </CardContent>
            </Card>
        )}
-       {/* <<< End Summary Card >>> */}
-
     </div>
   );
 }

@@ -2,118 +2,98 @@
 import NextAuth from 'next-auth';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { PrismaClient, UserRole } from '@prisma/client';
-import prisma from './prisma'; // Import singleton Prisma Client instance
-import { authConfig } from '@/auth.config'; // Import the Edge-compatible config
-import { JWT } from "next-auth/jwt"; // Import JWT type
-import bcrypt from 'bcryptjs'; // Ensure bcryptjs is used
+import prisma from './prisma';
+import { authConfig } from '@/auth.config';
+import { JWT } from "next-auth/jwt";
+import bcrypt from 'bcryptjs';
 
-// Extend the default Session type to include custom fields like id and role
+// Extend Session type
 declare module 'next-auth' {
   interface Session {
     user: {
       id: string;
-      role: UserRole; // Make role mandatory on the session user
-      // Include other default fields like name, email, image if needed,
-      // but Omit fields we don't expose or are overriding from the base User type
-    } & Omit<User, 'id' | 'role' | 'emailVerified' | 'passwordHash'>;
+      role: UserRole;
+      image?: string | null; // Ensure image is here
+    } & Omit<User, 'id' | 'role' | 'emailVerified' | 'passwordHash' | 'image'>;
   }
 
-  // Add role to the User object recognized internally by NextAuth
-  // This is the object passed to callbacks like 'jwt' on initial sign-in
+  // Extend User type recognized by callbacks
   interface User {
-    role?: UserRole; // Role is optional here as it might not be present initially from 'authorize'
+    role?: UserRole;
+    image?: string | null; // Ensure image is here
   }
 }
 
-// Extend the JWT type to include id and role for type safety
+// Extend JWT type
 declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     role: UserRole;
-    // Add any other properties you want to encode in the JWT, e.g., email: string;
+    picture?: string | null; // Use 'picture' standard claim
+    // Add other properties if needed
   }
 }
 
-// Initialize NextAuth using the base configuration and adding Node.js specific parts
 export const {
-  handlers, // Export handlers for the API route /api/auth/[...nextauth]
-  auth,     // Export auth function for server-side session access (Node.js runtime only!)
-  signIn,   // Export signIn function
-  signOut,  // Export signOut function
+  handlers,
+  auth,
+  signIn,
+  signOut,
 } = NextAuth({
-  ...authConfig, // Spread the base, Edge-compatible configuration (pages, providers, authorized callback)
-
-  // Keep Prisma Adapter for user/account management, OAuth linking, etc.
-  // Even with JWT strategy, the adapter handles user profile persistence.
+  ...authConfig,
   adapter: PrismaAdapter(prisma as PrismaClient),
-
-  session: {
-    strategy: 'jwt', // Use JWTs for session management
-    // maxAge and updateAge are relevant for the JWT cookie expiry
-    maxAge: 30 * 24 * 60 * 60, // JWT validity: 30 days
-    updateAge: 24 * 60 * 60,  // Update JWT expiry only once every 24 hours on interaction
-  },
+  session: { strategy: 'jwt' },
 
   callbacks: {
-    // Include any Edge-compatible callbacks defined in authConfig (like 'authorized')
     ...authConfig.callbacks,
 
-    // Define callbacks that REQUIRE Node.js runtime / DB access or relate to JWTs
-
-    // --- JWT Callback ---
-    // This is called whenever a JWT is created or updated.
-    // We add custom claims (id, role) to the token here.
     async jwt({ token, user, trigger, session }) {
-       // The 'user' object is passed only on initial sign-in after 'authorize' succeeds.
+      // console.log(`[Auth JWT Callback] Trigger: ${trigger}`, { token, user, session });
+
+      // Initial sign-in: Assign core data + image
       if (user) {
         token.id = user.id;
-        // The 'user' object might be minimal, fetch from DB for certainty if needed,
-        // but the role *should* be returned from our authorize function now.
-        if (user.role) {
-             token.role = user.role;
-        } else {
-             // Fallback: If authorize didn't return role, fetch it
-             const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
-             if (dbUser) {
-                 token.role = dbUser.role;
-             } else {
-                 console.error(`[Auth JWT Callback] Failed to find user ${user.id} in DB.`);
-                 // Handle error appropriately - perhaps throw or assign default/error role
-                 // For now, we might end up with a token missing the role if DB lookup fails
-             }
-        }
-        console.log("[Auth JWT Callback] Initial sign in, adding id and role to token:", { id: token.id, role: token.role });
+        token.role = user.role as UserRole;
+        token.picture = user.image; // Assign image from initial user object
       }
 
-       // Handle session updates if needed (e.g., updating user role in token if it changes)
-       // if (trigger === "update" && session?.user) {
-       //    token.role = session.user.role; // Example: update role from session data if manually triggered
-       // }
+      // Handle session update trigger specifically for profile changes
+      if (trigger === "update" && session?.user) {
+           // console.log("[Auth JWT Callback] Update Trigger - Received session data:", session.user);
+           // Only update the picture if it's explicitly passed in the update call
+           if (session.user.image !== undefined) {
+               // console.log("[Auth JWT Callback] Updating token picture from session update trigger to:", session.user.image);
+               token.picture = session.user.image; // Update token picture
+           }
+           // NOTE: Could potentially update other fields here too if needed during session updates
+           // For example: token.name = session.user.name (if name is part of the update)
+      }
 
-      return token; // Return the token with added claims
+      // Optional: Add a periodic refresh or check against DB if needed, but often not required
+      // if (someConditionToRefresh) {
+      //   const dbUser = await prisma.user.findUnique({ where: { id: token.id }, select: { image: true } });
+      //   if (dbUser) token.picture = dbUser.image;
+      // }
+
+      return token;
     },
 
-    // --- Session Callback ---
-    // This is called whenever a session is checked (e.g., via useSession, auth()).
-    // We transfer claims from the JWT token to the session object.
     async session({ session, token }) {
-      // 'token' contains the data we added in the jwt callback.
-      // Ensure token and session.user exist before assigning properties.
+       // console.log("[Auth Session Callback] Received token:", token);
+       // console.log("[Auth Session Callback] Received session (before update):", session);
+      // Always repopulate session from the latest token data
       if (token?.id && session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as UserRole; // Assign role from token
-        // Assign other properties from token if needed: session.user.email = token.email;
-        // console.log("[Auth Session Callback] Populating session user from token:", { id: session.user.id, role: session.user.role });
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.image = token.picture; // Ensure session image = token picture
       } else {
-        console.warn("[Auth Session Callback] Token or session.user missing required fields. Cannot populate session fully.", { tokenIdExists: !!token?.id, sessionUserExists: !!session.user });
+        console.warn("[Auth Session Callback] Token or session.user missing required fields.");
       }
-      return session; // Return the session object for the client/server component
+       // console.log("[Auth Session Callback] Returning session:", session);
+      return session;
     },
   },
 
-  // Debug and Secret remain the same
-  // Enable debug logs in development for more insight into callbacks and flow
   debug: process.env.NODE_ENV === 'development',
-  // Ensure NEXTAUTH_SECRET is set in your .env.local for JWT signing
   secret: process.env.NEXTAUTH_SECRET,
 });

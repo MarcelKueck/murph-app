@@ -1,14 +1,14 @@
 // components/features/ChatMessage.tsx
-'use client'; // Ensure this is a client component
+'use client';
 
 import React from 'react';
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Import AvatarImage
 import { cn } from "@/lib/utils";
 import { format } from 'date-fns';
 import { UserRole } from '@prisma/client';
-import { motion } from 'framer-motion'; // Import motion
+import { motion } from 'framer-motion';
 
-// Define type for the message data expected by this component
+// Update MessageData type
 export type MessageData = {
   id: string;
   content: string;
@@ -18,7 +18,7 @@ export type MessageData = {
     role: UserRole;
     firstName: string;
     lastName: string;
-    // image?: string | null;
+    image?: string | null; // <<< Add image field
   };
 };
 
@@ -27,14 +27,12 @@ interface ChatMessageProps {
   currentUserId: string;
 }
 
-// Define animation variants for the message
 const messageVariants = {
   hidden: { opacity: 0, y: 10 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
-  exit: { opacity: 0, transition: { duration: 0.1 } } // Optional exit animation
+  exit: { opacity: 0, transition: { duration: 0.1 } }
 };
 
-// Use React.forwardRef to allow AnimatePresence to track the component
 const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
   ({ message, currentUserId }, ref) => {
     const { content, createdAt, sender } = message;
@@ -45,14 +43,13 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
     const displayTime = format(new Date(createdAt), 'HH:mm');
 
     return (
-       // Wrap the entire message div with motion.div
        <motion.div
-        ref={ref} // Forward the ref here
+        ref={ref}
         variants={messageVariants}
         initial="hidden"
         animate="visible"
-        exit="exit" // Define exit animation if needed with AnimatePresence
-        layout // Add layout prop for smoother animations if list reorders/resizes
+        exit="exit"
+        layout
         className={cn(
           "flex items-start space-x-3 py-3",
           isOwnMessage ? "justify-end" : "justify-start"
@@ -60,8 +57,8 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
       >
         {/* Avatar (Show for other user's messages) */}
         {!isOwnMessage && (
-          <Avatar className="h-8 w-8 flex-shrink-0">
-            {/* <AvatarImage src={sender.image || undefined} alt={displayName} /> */}
+          <Avatar className="h-8 w-8 flex-shrink-0 border"> {/* Added border */}
+            <AvatarImage src={sender.image ?? undefined} alt={displayName} /> {/* <<< Use sender.image */}
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
         )}
@@ -73,18 +70,15 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
             ? "bg-brand-primary text-primary-foreground"
             : "bg-muted"
         )}>
-          {/* Sender Name (Show for other user's messages) */}
           {!isOwnMessage && (
             <p className="text-xs font-medium mb-1 text-muted-foreground">{displayName}</p>
           )}
-          {/* Message Content */}
           <p className={cn(
             "text-sm whitespace-pre-wrap break-words",
             !isOwnMessage && "text-card-foreground"
           )}>
             {content}
           </p>
-          {/* Timestamp */}
           <p className={cn(
             "text-xs mt-1",
             isOwnMessage ? "text-primary-foreground/70 text-right" : "text-muted-foreground text-left"
@@ -92,11 +86,19 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(
             {displayTime}
           </p>
         </div>
+
+        {/* Optional: Show own avatar on the right */}
+        {isOwnMessage && (
+           <Avatar className="h-8 w-8 flex-shrink-0 border ml-3"> {/* Added border & margin */}
+             <AvatarImage src={sender.image ?? undefined} alt={displayName} /> {/* <<< Use sender.image */}
+             <AvatarFallback>{initials}</AvatarFallback>
+           </Avatar>
+        )}
       </motion.div>
     );
   }
 );
 
-ChatMessage.displayName = "ChatMessage"; // Add display name for forwardRef component
+ChatMessage.displayName = "ChatMessage";
 
 export default ChatMessage;

@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
-import { Button } from '@/components/ui/button'; // Correct import path
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,12 +11,24 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"; // Correct import path
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Correct import path
-import { LayoutGrid, LogOut, User as UserIcon, Handshake } from "lucide-react"; // Removed FileText, added Handshake if needed elsewhere, Skeleton removed as UI element used
-import { Skeleton } from "@/components/ui/skeleton"; // <--- Import Skeleton from ui
-import Logo from './Logo'; // Assuming Logo is simple SVG or client-safe
-import { UserRole } from '@prisma/client'; // Keep if needed for role checks
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { LayoutGrid, LogOut, User as UserIcon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import Logo from './Logo';
+import { UserRole } from '@prisma/client';
+
+// Helper function for initials (can be moved to utils)
+const getInitials = (firstName?: string, lastName?: string, email?: string) => {
+    const first = firstName?.[0] ?? '';
+    const last = lastName?.[0] ?? '';
+    if (first || last) {
+        return `${first}${last}`.toUpperCase();
+    }
+    // Fallback to email initial if names are missing
+    return email?.[0]?.toUpperCase() ?? '?';
+};
+
 
 export default function Header() {
   const { data: session, status } = useSession();
@@ -25,8 +37,8 @@ export default function Header() {
   const user = session?.user;
   const userRole = user?.role;
 
-  // Using simple role-based initials for V1 fallback
-  const fallbackInitials = userRole === UserRole.PATIENT ? 'P' : userRole === UserRole.STUDENT ? 'S' : '?';
+  // Use email fallback if image and names are missing.
+  const fallbackInitials = user ? getInitials(undefined, undefined, user.email) : '?';
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -38,13 +50,11 @@ export default function Header() {
 
         <div className="flex items-center space-x-2 md:space-x-4">
           {isLoading ? (
-             // Use Skeleton component for loading state
              <div className="flex items-center space-x-2 md:space-x-4">
-                 <Skeleton className="h-8 w-24 rounded-md" /> {/* Skeleton for Dashboard link */}
-                 <Skeleton className="h-9 w-9 rounded-full" /> {/* Skeleton for Avatar */}
+                 <Skeleton className="h-8 w-24 rounded-md" />
+                 <Skeleton className="h-9 w-9 rounded-full" />
              </div>
           ) : user ? (
-            // Logged-in user view
             <>
               <Button variant="ghost" size="sm" asChild>
                 <Link href={userRole === UserRole.PATIENT ? '/patient/dashboard' : '/student/dashboard'}>
@@ -55,11 +65,10 @@ export default function Header() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  {/* Ensure Button itself is okay */}
                   <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                    <Avatar className="h-9 w-9">
-                      {/* Casting user.image to string | undefined */}
-                      <AvatarImage src={user.image as string | undefined} alt={user.email || 'User Avatar'} />
+                    <Avatar className="h-9 w-9 border"> {/* Added border */}
+                      {/* Use user.image from session */}
+                      <AvatarImage src={user.image ?? undefined} alt={user.email || 'User Avatar'} />
                       <AvatarFallback>{fallbackInitials}</AvatarFallback>
                     </Avatar>
                      <span className="sr-only">Benutzermenü öffnen</span>
@@ -69,7 +78,7 @@ export default function Header() {
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">
-                        {user.email}
+                        {user.email} {/* Email is guaranteed on session user */}
                       </p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {userRole === UserRole.PATIENT ? 'Patient*in' : 'Student*in'}

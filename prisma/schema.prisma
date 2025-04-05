@@ -1,4 +1,5 @@
 // prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,17 +16,18 @@ enum UserRole {
 }
 
 enum ConsultationStatus {
-  REQUESTED // ANGEFRAGT
-  ASSIGNED  // ZUGEWIESEN (Optional internal state if needed before IN_PROGRESS)
-  IN_PROGRESS // LAUFEND
-  COMPLETED // ABGESCHLOSSEN
-  CANCELLED // ABGEBROCHEN
+  REQUESTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
 
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
-  passwordHash  String?   // Used for Credentials provider
+  passwordHash  String?
+  image         String?   // <<< ADD THIS LINE for profile picture URL
   role          UserRole  @default(PATIENT)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -78,9 +80,9 @@ model PatientProfile {
   id        String   @id @default(cuid())
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  firstName String // Vorname
-  lastName  String // Nachname
-  dob       DateTime? // Geburtsdatum
+  firstName String
+  lastName  String
+  dob       DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -89,12 +91,12 @@ model StudentProfile {
   id            String   @id @default(cuid())
   userId        String   @unique
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  firstName     String // Vorname
-  lastName      String // Nachname
-  university    String // Universität (e.g., "LMU München", "TU München")
-  clinicalYear  Int    // Studienjahr / Klinik-Semester
-  isVerified    Boolean  @default(false) // IMPORTANT: Assume true for seeded students in V1.0
-  averageRating Float?   // Not used in V1.0 logic
+  firstName     String
+  lastName      String
+  university    String
+  clinicalYear  Int
+  isVerified    Boolean  @default(false)
+  averageRating Float?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -106,9 +108,9 @@ model Consultation {
   studentId       String?
   student         User?    @relation("StudentConsultations", fields: [studentId], references: [id], onDelete: SetNull)
   status          ConsultationStatus @default(REQUESTED)
-  topic           String   // Thema / Betreff (vom Patienten)
-  patientQuestion String   @db.Text // Frage des Patienten
-  summary         String?  @db.Text // Zusammenfassung (vom Studenten)
+  topic           String
+  patientQuestion String   @db.Text
+  summary         String?  @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -126,11 +128,11 @@ model Message {
   consultationId String
   consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   senderId       String
-  sender         User     @relation("SenderMessages", fields: [senderId], references: [id], onDelete: Cascade) // Patient or Student
-  content        String   @db.Text // Inhalt der Nachricht
+  sender         User     @relation("SenderMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content        String   @db.Text
   createdAt      DateTime @default(now())
 
-  @@index([consultationId, createdAt]) // Important for fetching messages in order
+  @@index([consultationId, createdAt])
   @@index([senderId])
 }
 
@@ -138,12 +140,12 @@ model Document {
   id             String   @id @default(cuid())
   consultationId String
   consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
-  uploaderId     String   // Should typically be the patient
+  uploaderId     String
   uploader       User     @relation("UploaderDocuments", fields: [uploaderId], references: [id], onDelete: Cascade)
-  fileName       String   // Original Dateiname
-  storageUrl     String   @db.Text // URL from Vercel Blob
-  mimeType       String   // e.g., 'application/pdf', 'image/jpeg'
-  fileSize       Int?     // Größe in Bytes
+  fileName       String
+  storageUrl     String   @db.Text
+  mimeType       String
+  fileSize       Int?
   createdAt      DateTime @default(now())
 
   @@index([consultationId])
