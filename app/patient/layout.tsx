@@ -1,6 +1,6 @@
 // app/patient/layout.tsx
 import React from 'react';
-import { auth } from '@/lib/auth'; // Import server-side auth
+import { auth } from '@/lib/auth'; // Use the auth helper with full session access
 import { redirect } from 'next/navigation';
 import { UserRole } from '@prisma/client';
 
@@ -9,20 +9,24 @@ export default async function PatientLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth(); // Get session data
+  const session = await auth(); // Get session data with role
 
-  // Double-check login status and role *within the layout*
+  // Redirect immediately if no session (middleware should prevent this, but double-check)
   if (!session?.user) {
-      // Should have been caught by middleware, but belts and braces
-      redirect('/login');
+      console.log("PatientLayout: No session found, redirecting to login.");
+      redirect('/login?callbackUrl=/patient/dashboard'); // Or use current path
+      return null;
   }
 
+  // Enforce PATIENT role
   if (session.user.role !== UserRole.PATIENT) {
-     // Logged in, but wrong role, redirect to student area
-     console.log(`PatientLayout: User ${session.user.id} is not a patient. Redirecting.`);
-     redirect('/student/dashboard'); // Redirect student away
+     console.log(`PatientLayout: User ${session.user.id} (Role: ${session.user.role}) is not a patient. Redirecting.`);
+     // Redirect non-patients away
+     const redirectUrl = session.user.role === UserRole.STUDENT ? '/student/dashboard' : session.user.role === UserRole.ADMIN ? '/admin/dashboard' : '/';
+     redirect(redirectUrl);
+     return null; // Stop rendering
   }
 
-  // If checks pass, render children
+  // If logged in and IS a patient, render children
   return <>{children}</>;
 }

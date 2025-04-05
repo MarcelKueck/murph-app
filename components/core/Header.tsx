@@ -17,18 +17,7 @@ import { LayoutGrid, LogOut, User as UserIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import Logo from './Logo';
 import { UserRole } from '@prisma/client';
-
-// Helper function for initials (can be moved to utils)
-const getInitials = (firstName?: string, lastName?: string, email?: string) => {
-    const first = firstName?.[0] ?? '';
-    const last = lastName?.[0] ?? '';
-    if (first || last) {
-        return `${first}${last}`.toUpperCase();
-    }
-    // Fallback to email initial if names are missing
-    return email?.[0]?.toUpperCase() ?? '?';
-};
-
+import { getInitials } from '@/lib/utils'; // Assuming getInitials is moved/available
 
 export default function Header() {
   const { data: session, status } = useSession();
@@ -37,7 +26,16 @@ export default function Header() {
   const user = session?.user;
   const userRole = user?.role;
 
-  // Use email fallback if image and names are missing.
+  // Determine dashboard link based on role
+  let dashboardHref = '/'; // Default fallback
+  if (userRole === UserRole.PATIENT) {
+    dashboardHref = '/patient/dashboard';
+  } else if (userRole === UserRole.STUDENT) {
+    dashboardHref = '/student/dashboard';
+  } else if (userRole === UserRole.ADMIN) {
+    dashboardHref = '/admin/dashboard';
+  }
+
   const fallbackInitials = user ? getInitials(undefined, undefined, user.email) : '?';
 
   return (
@@ -57,7 +55,7 @@ export default function Header() {
           ) : user ? (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link href={userRole === UserRole.PATIENT ? '/patient/dashboard' : '/student/dashboard'}>
+                <Link href={dashboardHref}>
                   <LayoutGrid className="mr-2 h-4 w-4" />
                   Dashboard
                 </Link>
@@ -66,8 +64,7 @@ export default function Header() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                    <Avatar className="h-9 w-9 border"> {/* Added border */}
-                      {/* Use user.image from session */}
+                    <Avatar className="h-9 w-9 border">
                       <AvatarImage src={user.image ?? undefined} alt={user.email || 'User Avatar'} />
                       <AvatarFallback>{fallbackInitials}</AvatarFallback>
                     </Avatar>
@@ -78,20 +75,32 @@ export default function Header() {
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">
-                        {user.email} {/* Email is guaranteed on session user */}
+                        {user.email}
                       </p>
                       <p className="text-xs leading-none text-muted-foreground">
-                        {userRole === UserRole.PATIENT ? 'Patient*in' : 'Student*in'}
+                         {userRole === UserRole.PATIENT ? 'Patient*in'
+                         : userRole === UserRole.STUDENT ? 'Student*in'
+                         : userRole === UserRole.ADMIN ? 'Administrator*in'
+                         : 'Unbekannt'}
                       </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                     <Link href={userRole === UserRole.PATIENT ? '/patient/profil' : '/student/profil'}>
-                      <UserIcon className="mr-2 h-4 w-4" />
-                      <span>Profil</span>
-                     </Link>
-                  </DropdownMenuItem>
+                  {userRole !== UserRole.ADMIN && (
+                       <DropdownMenuItem asChild>
+                           <Link href={userRole === UserRole.PATIENT ? '/patient/profil' : '/student/profil'}>
+                            <UserIcon className="mr-2 h-4 w-4" />
+                            <span>Profil</span>
+                           </Link>
+                        </DropdownMenuItem>
+                  )}
+                  {userRole === UserRole.ADMIN && (
+                        <DropdownMenuItem asChild>
+                            <Link href="/">
+                                <span>Zur Hauptseite</span>
+                            </Link>
+                        </DropdownMenuItem>
+                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => signOut({ callbackUrl: '/' })}>
                     <LogOut className="mr-2 h-4 w-4" />
