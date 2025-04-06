@@ -41,7 +41,6 @@ type FormData = z.infer<typeof LoginSchema> | z.infer<typeof RegisterSchema>;
 export default function AuthForm({ mode }: AuthFormProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
-    // We still read callbackUrl, as it's needed if user was redirected *to* login
     const callbackUrl = searchParams.get('callbackUrl') || '/';
 
     const [isPending, startTransition] = useTransition();
@@ -81,62 +80,37 @@ export default function AuthForm({ mode }: AuthFormProps) {
             if (mode === 'login') {
                 try {
                     const result = await signIn('credentials', {
-                        redirect: false, // Keep this false
+                        redirect: false,
                         email: (values as z.infer<typeof LoginSchema>).email,
                         password: (values as z.infer<typeof LoginSchema>).password,
-                        // No explicit callbackUrl needed here for signIn itself
                     });
 
                     if (result?.error) {
-                        toast.error("Anmeldung fehlgeschlagen", {
-                            description: "Ungültige E-Mail oder Passwort.",
-                        });
+                        toast.error("Anmeldung fehlgeschlagen", { description: "Ungültige E-Mail oder Passwort." });
                     } else if (result?.ok) {
-                        setShowSuccess(true); // Show checkmark
-                        toast.success("Anmeldung erfolgreich!"); // Show toast immediately
-
-                        // --- CHANGE HERE: Refresh instead of push ---
-                        // Let middleware handle redirect on refresh based on new session
-                        router.refresh();
-                        // No need for setTimeout delay anymore, refresh will trigger navigation
-
+                        setShowSuccess(true);
+                        toast.success("Anmeldung erfolgreich!");
+                        router.refresh(); // Let middleware handle redirect
                     } else {
-                         toast.error("Anmeldung fehlgeschlagen", {
-                            description: "Ein unbekannter Fehler ist aufgetreten.",
-                        });
+                         toast.error("Anmeldung fehlgeschlagen", { description: "Ein unbekannter Fehler ist aufgetreten." });
                     }
                 } catch (error) {
                     console.error("Login Signin Error:", error);
-                    toast.error("Anmeldung fehlgeschlagen", {
-                         description: "Ein Netzwerk- oder Serverfehler ist aufgetreten.",
-                    });
+                    toast.error("Anmeldung fehlgeschlagen", { description: "Ein Netzwerk- oder Serverfehler ist aufgetreten." });
                 }
 
-            } else { // Registration logic remains the same
+            } else { // Registration logic
                 const result: RegistrationResult = await registerUser(values as z.infer<typeof RegisterSchema>);
 
                 if (result.success) {
                     setShowSuccess(true);
                      setTimeout(() => {
-                        toast.success("Registrierung erfolgreich!", {
-                            description: result.message,
-                        });
+                        toast.success("Registrierung erfolgreich!", { description: result.message });
                         router.push('/login');
                      }, 1200);
                 } else {
-                    toast.error("Registrierung fehlgeschlagen", {
-                        description: result.message || "Bitte überprüfen Sie Ihre Eingaben.",
-                    });
-                    if (result.fieldErrors) {
-                        Object.entries(result.fieldErrors).forEach(([field, errors]) => {
-                             if (errors) {
-                                form.setError(field as keyof FormData, {
-                                    type: 'server',
-                                    message: errors.join(', '),
-                                });
-                            }
-                        });
-                    }
+                     toast.error("Registrierung fehlgeschlagen", { description: result.message || "Bitte überprüfen Sie Ihre Eingaben." });
+                     if (result.fieldErrors) { Object.entries(result.fieldErrors).forEach(([field, errors]) => { if (errors) { form.setError(field as keyof FormData, { type: 'server', message: errors.join(', '), }); } }); }
                 }
             }
         });
@@ -145,156 +119,150 @@ export default function AuthForm({ mode }: AuthFormProps) {
     return (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                {/* ... rest of the form fields ... */}
-                 {mode === 'register' && (
+                {mode === 'register' && (
                     <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField
-                                control={form.control}
-                                name="firstName"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Vorname</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Max" {...field} disabled={isPending || showSuccess} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="lastName"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Nachname</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Mustermann" {...field} disabled={isPending || showSuccess} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
+                        {/* First Name */}
+                        <FormField
+                            control={form.control}
+                            name="firstName"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Vorname</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Max" {...field} disabled={isPending || showSuccess} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        {/* Last Name */}
+                        <FormField
+                            control={form.control}
+                            name="lastName"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Nachname</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Mustermann" {...field} disabled={isPending || showSuccess} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        {/* Role Selection */}
                         <FormField
                              control={form.control}
                              name="role"
                              render={({ field }) => (
                                 <FormItem className="space-y-3">
-                                <FormLabel>Ich bin...</FormLabel>
-                                <FormControl>
+                                    <FormLabel>Ich bin...</FormLabel>
+                                    {/* RadioGroup should not be inside FormControl */}
                                     <RadioGroup
-                                    onValueChange={field.onChange}
-                                    defaultValue={field.value}
-                                    className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4"
-                                    disabled={isPending || showSuccess}
+                                        onValueChange={field.onChange}
+                                        value={field.value}
+                                        className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4"
+                                        disabled={isPending || showSuccess}
+                                        // Accessibility attributes applied by FormControl to RadioGroupItem
                                     >
-                                    <FormItem className="flex items-center space-x-3 space-y-0">
-                                        <FormControl>
-                                        <RadioGroupItem value={UserRole.PATIENT} />
-                                        </FormControl>
-                                        <FormLabel className="font-normal">Patient*in</FormLabel>
-                                    </FormItem>
-                                    <FormItem className="flex items-center space-x-3 space-y-0">
-                                        <FormControl>
-                                        <RadioGroupItem value={UserRole.STUDENT} />
-                                        </FormControl>
-                                        <FormLabel className="font-normal">Medizinstudent*in</FormLabel>
-                                    </FormItem>
+                                        <FormItem className="flex items-center space-x-3 space-y-0">
+                                            <FormControl>
+                                                <RadioGroupItem value={UserRole.PATIENT} id="role-patient"/>
+                                            </FormControl>
+                                            <FormLabel htmlFor="role-patient" className="font-normal cursor-pointer">Patient*in</FormLabel>
+                                        </FormItem>
+                                        <FormItem className="flex items-center space-x-3 space-y-0">
+                                            <FormControl>
+                                                <RadioGroupItem value={UserRole.STUDENT} id="role-student"/>
+                                            </FormControl>
+                                            <FormLabel htmlFor="role-student" className="font-normal cursor-pointer">Medizinstudent*in</FormLabel>
+                                        </FormItem>
                                     </RadioGroup>
-                                </FormControl>
-                                <FormMessage />
+                                    <FormMessage />
                                 </FormItem>
                             )}
-                            />
+                        />
 
-                        {/* Conditional Patient Field: Date of Birth */}
+                        {/* Date of Birth (Patient) */}
                         {selectedRole === UserRole.PATIENT && (
                              <FormField
                                 control={form.control}
                                 name="dob"
                                 render={({ field }) => (
                                     <FormItem className="flex flex-col">
-                                    <FormLabel>Geburtsdatum (Optional)</FormLabel>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                        <FormControl>
-                                            <Button
-                                                type="button"
-                                                variant={"outline"}
-                                                className={cn(
-                                                    "w-[240px] pl-3 text-left font-normal",
-                                                    !field.value && "text-muted-foreground"
-                                                )}
-                                                disabled={isPending || showSuccess}
-                                                >
-                                                {field.value ? (
-                                                    format(field.value, "PPP", { locale: de })
-                                                ) : (
-                                                    <span>Wähle ein Datum</span>
-                                                )}
-                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                            </Button>
-                                        </FormControl>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                            mode="single"
-                                            selected={field.value ?? undefined}
-                                            onSelect={field.onChange}
-                                            disabled={(date) =>
-                                                date > new Date() || date < new Date("1900-01-01") || isPending || showSuccess
-                                            }
-                                            initialFocus
-                                            captionLayout="dropdown-buttons"
-                                            fromYear={1920}
-                                            toYear={new Date().getFullYear()}
-                                            locale={de}
-                                        />
-                                        </PopoverContent>
-                                    </Popover>
-                                    <FormMessage />
+                                        <FormLabel>Geburtsdatum (Optional)</FormLabel>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                {/* FormControl wraps the trigger Button */}
+                                                <FormControl>
+                                                    <Button
+                                                        type="button"
+                                                        variant={"outline"}
+                                                        className={cn(
+                                                            "w-[240px] pl-3 text-left font-normal",
+                                                            !field.value && "text-muted-foreground"
+                                                        )}
+                                                        disabled={isPending || showSuccess}
+                                                        >
+                                                        {field.value ? ( format(field.value, "PPP", { locale: de }) ) : ( <span>Wähle ein Datum</span> )}
+                                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </FormControl>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={field.value ?? undefined}
+                                                    onSelect={field.onChange}
+                                                    disabled={(date) => date > new Date() || date < new Date("1900-01-01") || isPending || showSuccess }
+                                                    initialFocus captionLayout="dropdown-buttons" fromYear={1920} toYear={new Date().getFullYear()} locale={de}
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
+                                        <FormMessage />
                                     </FormItem>
                                 )}
                             />
                         )}
 
-                         {/* Conditional Student Fields */}
+                        {/* University (Student) */}
                         {showStudentFields && (
-                            <>
-                                <FormField
-                                    control={form.control}
-                                    name="university"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Universität</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="z.B. LMU München" {...field} disabled={isPending || showSuccess} />
-                                            </FormControl>
-                                             <FormDescription>Bitte geben Sie den offiziellen Namen Ihrer Universität an.</FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="clinicalYear"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Klinisches Semester / Studienjahr</FormLabel>
-                                            <FormControl>
-                                                <Input type="number" placeholder="z.B. 3" {...field} onChange={event => field.onChange(+event.target.value)} disabled={isPending || showSuccess} />
-                                            </FormControl>
-                                             <FormDescription>In welchem klinischen Jahr/Semester sind Sie?</FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            </>
+                            <FormField
+                                control={form.control}
+                                name="university"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Universität</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="z.B. LMU München" {...field} disabled={isPending || showSuccess} />
+                                        </FormControl>
+                                        <FormDescription>Bitte geben Sie den offiziellen Namen Ihrer Universität an.</FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
                         )}
-                    </>
+                        {/* Clinical Year (Student) */}
+                        {showStudentFields && (
+                            <FormField
+                                control={form.control}
+                                name="clinicalYear"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Klinisches Semester / Studienjahr</FormLabel>
+                                        <FormControl>
+                                            <Input type="number" placeholder="z.B. 3" {...field} onChange={event => field.onChange(+event.target.value)} disabled={isPending || showSuccess} />
+                                        </FormControl>
+                                        <FormDescription>In welchem klinischen Jahr/Semester sind Sie?</FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
+                    </> // End Register-specific fields
                 )}
 
+                {/* Email */}
                 <FormField
                     control={form.control}
                     name="email"
@@ -308,6 +276,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                         </FormItem>
                     )}
                 />
+                {/* Password */}
                 <FormField
                     control={form.control}
                     name="password"
@@ -317,11 +286,12 @@ export default function AuthForm({ mode }: AuthFormProps) {
                             <FormControl>
                                 <Input type="password" placeholder="********" {...field} disabled={isPending || showSuccess} />
                             </FormControl>
-                             {mode === 'register' && <FormDescription>Mindestens 8 Zeichen.</FormDescription>}
+                            {mode === 'register' && <FormDescription>Mindestens 8 Zeichen.</FormDescription>}
                             <FormMessage />
                         </FormItem>
                     )}
                 />
+                {/* Confirm Password (Register) */}
                 {mode === 'register' && (
                     <FormField
                         control={form.control}
@@ -338,52 +308,37 @@ export default function AuthForm({ mode }: AuthFormProps) {
                     />
                 )}
 
-                 {mode === 'login' && (
+                {/* Forgot Password Link (Login) */}
+                {mode === 'login' && (
                     <div className="text-right">
-                        <Button type="button" variant="link" size="sm" asChild className="font-normal px-0">
-                           <Link href="#">Passwort vergessen?</Link>
+                        <Button type="button" variant="link" size="sm" asChild className="font-normal px-0 h-auto py-0 text-xs">
+                           <Link href="/forgot-password">Passwort vergessen?</Link>
                         </Button>
                     </div>
                 )}
 
-                <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isPending || showSuccess}
-                    animateInteraction={!isPending && !showSuccess}
-                >
-                    {showSuccess ? (
-                        <AnimatedCheckmark />
-                    ) : isPending ? (
-                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
+                {/* Submit Button */}
+                <Button type="submit" className="w-full" disabled={isPending || showSuccess} animateInteraction={!isPending && !showSuccess}>
+                    {showSuccess ? ( <AnimatedCheckmark /> ) : isPending ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : null}
                     {!showSuccess && (mode === 'login' ? 'Anmelden' : 'Registrieren')}
                 </Button>
 
-                 <div className="text-center text-sm text-muted-foreground">
+                {/* Switch Mode Links */}
+                <div className="text-center text-sm text-muted-foreground">
                     {mode === 'login' ? (
-                        <>
-                            Noch kein Konto?{' '}
-                            <Link href="/registrieren" className="font-medium text-primary hover:underline">
-                                Jetzt registrieren
-                            </Link>
-                        </>
+                        <> Noch kein Konto?{' '} <Link href="/registrieren" className="font-medium text-primary hover:underline"> Jetzt registrieren </Link> </>
                     ) : (
-                         <>
-                           Bereits registriert?{' '}
-                            <Link href="/login" className="font-medium text-primary hover:underline">
-                                Hier anmelden
-                            </Link>
-                        </>
+                        <> Bereits registriert?{' '} <Link href="/login" className="font-medium text-primary hover:underline"> Hier anmelden </Link> </>
                     )}
                 </div>
-                 {mode === 'register' && (
-                     <p className="text-xs text-center text-muted-foreground pt-4">
+                {/* Legal Text (Register) */}
+                {mode === 'register' && (
+                    <p className="text-xs text-center text-muted-foreground pt-4">
                         Mit der Registrierung stimmen Sie unseren{' '}
                         <Link href="/agb" className="underline hover:text-primary">AGB</Link> und{' '}
                         <Link href="/datenschutz" className="underline hover:text-primary">Datenschutzbestimmungen</Link> zu.
                     </p>
-                 )}
+                )}
             </form>
         </Form>
     );

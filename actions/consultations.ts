@@ -4,57 +4,57 @@
 import { z } from 'zod';
 import { ConsultationRequestSchema, UploadedDocument } from '@/lib/validation';
 import prisma from '@/lib/prisma';
-import { auth } from '@/lib/auth'; // Server-side auth helper
-import { ConsultationStatus, UserRole } from '@prisma/client'; // Enums
-import { revalidatePath } from 'next/cache'; // For updating cached pages
+import { auth } from '@/lib/auth';
+import { ConsultationStatus, UserRole } from '@prisma/client';
+import { revalidatePath } from 'next/cache';
+import { sendEmail, templates } from '@/lib/email'; // Correct import
 
-// --- Shared Type Definition for Action Results ---
 export type ConsultationActionResult = {
     success: boolean;
-    message: string; // User-facing message
-    consultationId?: string; // Optionally return ID
-    fieldErrors?: { [key: string]: string[] | undefined }; // Optional field-specific validation errors
+    message: string;
+    consultationId?: string;
+    fieldErrors?: { [key: string]: string[] | undefined };
 };
-
 
 // --- Action 1: Create a New Consultation Request (by Patient) ---
 export async function createConsultation(
     values: z.infer<typeof ConsultationRequestSchema>,
-    documents: UploadedDocument[] // Array of successfully uploaded documents
+    documents: UploadedDocument[]
 ): Promise<ConsultationActionResult> {
 
-    // 1. Authenticate user and check role
     const session = await auth();
     if (!session?.user?.id || session.user.role !== 'PATIENT') {
         return { success: false, message: "Nicht autorisiert. Nur Patienten können Anfragen erstellen." };
     }
     const patientId = session.user.id;
 
-    // 2. Validate input data (server-side check)
+    // Fetch patient details for email personalization
+    const patientUser = await prisma.user.findUnique({
+        where: { id: patientId },
+        select: { email: true, patientProfile: { select: { firstName: true } } }
+    });
+    if (!patientUser) {
+        return { success: false, message: "Patient nicht gefunden." }; // Should not happen if session is valid
+    }
+
+
     const validatedFields = ConsultationRequestSchema.safeParse(values);
     if (!validatedFields.success) {
-         console.log("Create Consultation Server Validation Failed:", validatedFields.error.flatten().fieldErrors);
-        return {
-            success: false,
-            message: "Ungültige Eingabe.",
-            fieldErrors: validatedFields.error.flatten().fieldErrors,
-        };
+        return { success: false, message: "Ungültige Eingabe.", fieldErrors: validatedFields.error.flatten().fieldErrors };
     }
     const { topic, patientQuestion } = validatedFields.data;
 
-    // 3. Create Consultation and Documents in Database within a transaction
     try {
         const newConsultation = await prisma.consultation.create({
             data: {
                 patientId: patientId,
                 topic: topic,
                 patientQuestion: patientQuestion,
-                status: ConsultationStatus.REQUESTED, // Initial status
-                // Conditionally create related documents if the array is not empty
+                status: ConsultationStatus.REQUESTED,
                 ...(documents.length > 0 && {
                     documents: {
                         create: documents.map(doc => ({
-                            uploaderId: patientId, // Link document to the patient
+                            uploaderId: patientId,
                             fileName: doc.fileName,
                             storageUrl: doc.storageUrl,
                             mimeType: doc.mimeType,
@@ -67,7 +67,21 @@ export async function createConsultation(
 
         console.log(`Consultation created successfully: ID ${newConsultation.id} for user ${patientId}`);
 
-        // Revalidate the patient dashboard path so the new request appears
+        // <<< Send Request Confirmation Email >>>
+        const templateData = templates.requestConfirmation(
+            { email: patientUser.email, firstName: patientUser.patientProfile?.firstName },
+            { id: newConsultation.id, topic: newConsultation.topic }
+        );
+        await sendEmail({
+            to: patientUser.email,
+            subject: templateData.subject,
+            text: templateData.text,
+            html: templateData.html,
+        }).catch(err => {
+            console.error(`Failed to send confirmation email for consultation ${newConsultation.id}:`, err);
+        });
+        // <<< End Email Sending >>>
+
         revalidatePath('/patient/dashboard');
 
         return {
@@ -78,10 +92,7 @@ export async function createConsultation(
 
     } catch (error) {
         console.error("Error creating consultation:", error);
-        return {
-            success: false,
-            message: "Fehler beim Erstellen der Beratung. Bitte versuchen Sie es später erneut.",
-        };
+        return { success: false, message: "Fehler beim Erstellen der Beratung. Bitte versuchen Sie es später erneut." };
     }
 }
 
@@ -89,16 +100,14 @@ export async function createConsultation(
 // --- Action 2: Accept a Consultation Request (by Student) ---
 export async function acceptConsultation(
     consultationId: string
-): Promise<{ success: boolean; message: string; error?: any }> { // Using simpler return type for now
+): Promise<{ success: boolean; message: string; error?: any }> {
 
-    // 1. Authenticate user and check role
     const session = await auth();
     if (!session?.user?.id || session.user.role !== UserRole.STUDENT) {
         return { success: false, message: "Nicht autorisiert. Nur Studenten können Beratungen annehmen." };
     }
     const studentId = session.user.id;
 
-     // 2. Basic validation of input ID
     if (!consultationId || typeof consultationId !== 'string') {
         return { success: false, message: "Ungültige Beratungs-ID." };
     }
@@ -106,117 +115,125 @@ export async function acceptConsultation(
     console.log(`Student ${studentId} attempting to accept consultation ${consultationId}`);
 
     try {
-        // 3. Find the consultation and ensure it's available (REQUESTED status)
-        // Use transaction to prevent race conditions (optional but safer)
-        const updatedConsultation = await prisma.$transaction(async (tx) => {
+        let acceptedConsultation; // To hold result for email
+        await prisma.$transaction(async (tx) => {
             const consultation = await tx.consultation.findUnique({
                 where: { id: consultationId },
-                select: { status: true } // Select only status for checking
+                select: { status: true }
             });
 
-            if (!consultation) {
-                throw new Error("Beratung nicht gefunden."); // Will be caught below
-            }
+            if (!consultation) throw new Error("Beratung nicht gefunden.");
+            if (consultation.status !== ConsultationStatus.REQUESTED) throw new Error("Diese Beratung ist nicht mehr verfügbar oder wurde bereits angenommen.");
 
-            if (consultation.status !== ConsultationStatus.REQUESTED) {
-                throw new Error("Diese Beratung ist nicht mehr verfügbar oder wurde bereits angenommen.");
-            }
+            const studentProfile = await tx.studentProfile.findUnique({ where: { userId: studentId }, select: { isVerified: true } });
+            if (!studentProfile?.isVerified) throw new Error("Nur verifizierte Studenten können Anfragen annehmen.");
 
-             // 4. Update the consultation: Assign student and change status
-             return await tx.consultation.update({
-                where: { id: consultationId }, // Already checked status above
-                data: {
-                    studentId: studentId,
-                    status: ConsultationStatus.IN_PROGRESS,
-                },
+            // Update and fetch related data needed for email
+            acceptedConsultation = await tx.consultation.update({
+                where: { id: consultationId },
+                data: { studentId: studentId, status: ConsultationStatus.IN_PROGRESS },
+                include: {
+                    patient: { select: { email: true, patientProfile: { select: { firstName: true } } } },
+                    student: { select: { studentProfile: { select: { firstName: true, lastName: true } } } } // Get accepting student's name
+                }
             });
         });
 
+        if (!acceptedConsultation) {
+            throw new Error("Failed to retrieve accepted consultation details after update.");
+        }
 
-        console.log(`Consultation ${updatedConsultation.id} accepted by student ${studentId}`);
+        console.log(`Consultation ${acceptedConsultation.id} accepted by student ${studentId}`);
 
-        // 5. Revalidate relevant paths to update UI
-        revalidatePath('/student/dashboard'); // Update the student's dashboard queue/list
+        // <<< Send Consultation Accepted Email to Patient >>>
+        if (acceptedConsultation.patient && acceptedConsultation.patient.email && acceptedConsultation.student?.studentProfile) {
+            const studentName = `${acceptedConsultation.student.studentProfile.firstName} ${acceptedConsultation.student.studentProfile.lastName}`.trim();
+            const templateData = templates.consultationAccepted(
+                { email: acceptedConsultation.patient.email, firstName: acceptedConsultation.patient.patientProfile?.firstName },
+                { name: studentName },
+                { id: acceptedConsultation.id, topic: acceptedConsultation.topic }
+            );
+            await sendEmail({
+                to: acceptedConsultation.patient.email,
+                subject: templateData.subject,
+                text: templateData.text,
+                html: templateData.html,
+            }).catch(err => {
+                console.error(`Failed to send accepted email for consultation ${acceptedConsultation.id}:`, err);
+            });
+        } else {
+            console.warn(`Could not send accepted email for consultation ${acceptedConsultation.id}: Missing patient/student details.`);
+        }
+        // <<< End Email Sending >>>
+
+        revalidatePath('/student/dashboard');
+        revalidatePath(`/patient/beratungen/${consultationId}`); // Revalidate patient detail page too
+        revalidatePath('/patient/dashboard'); // Revalidate patient dashboard
 
         return { success: true, message: "Beratung erfolgreich angenommen." };
 
     } catch (error: any) {
         console.error(`Error accepting consultation ${consultationId} by student ${studentId}:`, error);
-        // Return specific error messages if available
         return { success: false, message: error.message || "Ein Fehler ist beim Annehmen der Beratung aufgetreten.", error: error };
     }
 }
 
 
 // --- Action 3: Complete a Consultation (by Student) ---
+// (Already sends email)
 export async function completeConsultation(
     consultationId: string,
     summary: string
-): Promise<ConsultationActionResult> { // Using shared return type
-     // 1. Authenticate user and check role
-    const session = await auth();
-    if (!session?.user?.id || session.user.role !== UserRole.STUDENT) {
-        return { success: false, message: "Nicht autorisiert. Nur Studenten können Beratungen abschließen." };
-    }
-    const studentId = session.user.id;
-
-     // 2. Basic validation
-    if (!consultationId || typeof consultationId !== 'string') {
-        return { success: false, message: "Ungültige Beratungs-ID." };
-    }
-     // Validate summary length server-side
-    const trimmedSummary = summary.trim();
-    if (trimmedSummary.length < 10 || trimmedSummary.length > 2000) {
-         return {
-            success: false,
-            message: "Zusammenfassung ist ungültig (10-2000 Zeichen erforderlich).",
-            fieldErrors: { summary: ["Zusammenfassung muss zwischen 10 und 2000 Zeichen lang sein."] }
-         };
-    }
-
+): Promise<ConsultationActionResult> {
+     const session = await auth();
+     if (!session?.user?.id || session.user.role !== UserRole.STUDENT) {
+         return { success: false, message: "Nicht autorisiert." };
+     }
+     const studentId = session.user.id;
+     if (!consultationId) return { success: false, message: "Ungültige Beratungs-ID." };
+     const trimmedSummary = summary.trim();
+     if (trimmedSummary.length < 10 || trimmedSummary.length > 2000) {
+          return { success: false, message: "Zusammenfassung ist ungültig (10-2000 Zeichen erforderlich).", fieldErrors: { summary: ["Zusammenfassung muss zwischen 10 und 2000 Zeichen lang sein."] } };
+     }
     console.log(`Student ${studentId} attempting to complete consultation ${consultationId}`);
-
     try {
-        // 3. Find the consultation, ensure it's assigned to this student and IN_PROGRESS
-        // Use transaction for safety? Less critical than accept, but doesn't hurt.
-        const updatedConsultation = await prisma.$transaction(async (tx) => {
-             const consultation = await tx.consultation.findFirst({
-                where: {
-                    id: consultationId,
-                    studentId: studentId, // Ensure it's assigned to this student
-                },
-                select: { status: true }
-            });
-
-            if (!consultation) {
-                // Either doesn't exist or isn't assigned to this student
-                throw new Error("Beratung nicht gefunden oder nicht zugewiesen.");
-            }
-
-            if (consultation.status !== ConsultationStatus.IN_PROGRESS) {
-                // Consultation already completed or in another state
-                throw new Error("Diese Beratung ist nicht aktiv und kann nicht abgeschlossen werden.");
-            }
-
-             // 4. Update the consultation: Set summary and change status to COMPLETED
-             return await tx.consultation.update({
-                where: {
-                    id: consultationId,
-                    // Optional: Add studentId again as safety check
-                    // studentId: studentId,
-                },
-                data: {
-                    summary: trimmedSummary,
-                    status: ConsultationStatus.COMPLETED,
-                },
+        let completedConsultation;
+        await prisma.$transaction(async (tx) => {
+             const consultation = await tx.consultation.findFirst({ where: { id: consultationId, studentId: studentId }, select: { status: true, patientId: true } });
+             if (!consultation) throw new Error("Beratung nicht gefunden oder nicht zugewiesen.");
+             if (consultation.status !== ConsultationStatus.IN_PROGRESS) throw new Error("Diese Beratung ist nicht aktiv.");
+             completedConsultation = await tx.consultation.update({
+                where: { id: consultationId },
+                data: { summary: trimmedSummary, status: ConsultationStatus.COMPLETED },
+                 include: { patient: { select: { email: true, patientProfile: { select: { firstName: true } } } } }
             });
         });
+        if (!completedConsultation) { throw new Error("Failed to retrieve completed consultation details after update."); }
+        console.log(`Consultation ${completedConsultation.id} completed by student ${studentId}`);
 
-         console.log(`Consultation ${updatedConsultation.id} completed by student ${studentId}`);
+        // Send Completion Email to Patient
+        if (completedConsultation.patient && completedConsultation.patient.email) {
+            const feedbackLink = `${process.env.NEXT_PUBLIC_APP_BASE_URL}/feedback?consultationId=${completedConsultation.id}`;
+            const templateData = templates.consultationCompleted(
+                 { email: completedConsultation.patient.email, firstName: completedConsultation.patient.patientProfile?.firstName },
+                 { id: completedConsultation.id, topic: completedConsultation.topic },
+                 feedbackLink
+            );
+             await sendEmail({
+                to: completedConsultation.patient.email,
+                subject: templateData.subject,
+                text: templateData.text,
+                html: templateData.html
+             }).catch(err => { console.error(`Failed to send completion email for consultation ${completedConsultation.id}:`, err); });
+        } else {
+             console.warn(`Could not send completion email for consultation ${completedConsultation.id}: Patient email missing.`);
+        }
 
-        // 5. Revalidate relevant paths
-        revalidatePath('/student/dashboard'); // Update the student's dashboard list
-        revalidatePath(`/student/beratungen/${consultationId}`); // Update the detail page itself
+        // Revalidate paths
+        revalidatePath('/student/dashboard');
+        revalidatePath(`/student/beratungen/${consultationId}`);
+        revalidatePath(`/patient/beratungen/${consultationId}`);
+        revalidatePath('/patient/dashboard');
 
         return { success: true, message: "Beratung erfolgreich abgeschlossen." };
 

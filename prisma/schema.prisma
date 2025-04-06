@@ -6,10 +6,9 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") // For migrations/seeding with Vercel Postgres
+  directUrl = env("DIRECT_URL")
 }
 
-// <<< UPDATED UserRole Enum >>>
 enum UserRole {
   PATIENT
   STUDENT
@@ -29,7 +28,7 @@ model User {
   email         String    @unique
   passwordHash  String?
   image         String?
-  role          UserRole  @default(PATIENT) // Default remains PATIENT
+  role          UserRole  @default(PATIENT)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -39,13 +38,12 @@ model User {
   consultationsAsPatient Consultation[] @relation("PatientConsultations")
   consultationsAsStudent Consultation[] @relation("StudentConsultations")
   uploadedDocuments Document[] @relation("UploaderDocuments")
+  passwordResetTokens PasswordResetToken[] // <<< ADD THIS RELATION
 
-  // NextAuth.js specific models
   accounts Account[]
   sessions Session[]
 }
 
-// NextAuth.js Account model
 model Account {
   id                 String  @id @default(cuid())
   userId             String
@@ -59,21 +57,17 @@ model Account {
   scope              String?
   id_token           String? @db.Text
   session_state      String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([provider, providerAccountId])
   @@index([userId])
 }
 
-// NextAuth.js Session model
 model Session {
   id           String   @id @default(cuid())
   sessionToken String   @unique
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId])
 }
 
@@ -118,6 +112,12 @@ model Consultation {
   messages        Message[]
   documents       Document[]
 
+  // <<< ADD Feedback Fields >>>
+  patientRating   Int?     // e.g., 1-5
+  patientFeedback String?  @db.Text
+  // feedbackToken String? @unique // Simplified V1 - Token removed for now
+  // feedbackTokenExpires DateTime? // Simplified V1 - Token removed for now
+
   @@index([patientId])
   @@index([studentId])
   @@index([status])
@@ -132,7 +132,6 @@ model Message {
   sender         User     @relation("SenderMessages", fields: [senderId], references: [id], onDelete: Cascade)
   content        String   @db.Text
   createdAt      DateTime @default(now())
-
   @@index([consultationId, createdAt])
   @@index([senderId])
 }
@@ -148,7 +147,19 @@ model Document {
   mimeType       String
   fileSize       Int?
   createdAt      DateTime @default(now())
-
   @@index([consultationId])
   @@index([uploaderId])
+}
+
+// <<< ADD PasswordResetToken Model >>>
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique // Store a hash of the token
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

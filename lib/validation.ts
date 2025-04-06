@@ -72,30 +72,36 @@ export type UploadedDocument = {
 };
 
 // --- Profile Update Schemas ---
-
-// Base schema for common fields
 const BaseProfileSchema = z.object({
     firstName: z.string().trim().min(1, { message: "Vorname ist erforderlich." }),
     lastName: z.string().trim().min(1, { message: "Nachname ist erforderlich." }),
-    // imageUrl is handled separately or passed directly, not part of form data validation here usually
 });
-
-// Patient specific update schema
 export const UpdatePatientProfileSchema = BaseProfileSchema.extend({
-    dob: z.date({ invalid_type_error: "Ungültiges Datum." })
-      .optional()
-      .nullable(),
+    dob: z.date({ invalid_type_error: "Ungültiges Datum." }).optional().nullable(),
 });
 export type UpdatePatientProfileFormData = z.infer<typeof UpdatePatientProfileSchema>;
-
-// Student specific update schema
 export const UpdateStudentProfileSchema = BaseProfileSchema.extend({
     university: z.string().trim().min(1, { message: "Universität ist erforderlich."}),
-    clinicalYear: z.coerce
-        .number({ invalid_type_error: "Bitte geben Sie eine Zahl ein." })
-        .int({ message: "Muss eine ganze Zahl sein." })
-        .positive({ message: "Muss positiv sein." })
-        .min(1, { message: "Muss mindestens 1 sein." })
-        .max(10, { message: "Unrealistisches Studienjahr." }),
+    clinicalYear: z.coerce.number().int().positive().min(1).max(10),
 });
 export type UpdateStudentProfileFormData = z.infer<typeof UpdateStudentProfileSchema>;
+
+// --- Password Reset Schemas ---
+export const RequestPasswordResetSchema = z.object({
+    email: z.string().email({ message: "Bitte geben Sie eine gültige E-Mail-Adresse ein." }),
+});
+export const ResetPasswordSchema = z.object({
+    token: z.string().min(1, { message: "Token fehlt." }),
+    password: z.string().min(8, { message: "Neues Passwort muss mindestens 8 Zeichen lang sein." }),
+    confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+    message: "Die Passwörter stimmen nicht überein.",
+    path: ["confirmPassword"],
+});
+
+// --- Feedback Schema ---
+export const SubmitFeedbackSchema = z.object({
+    consultationId: z.string().cuid("Ungültige Beratungs-ID."),
+    rating: z.coerce.number().int().min(1, "Bewertung ist erforderlich.").max(5, "Bewertung muss zwischen 1 und 5 liegen."),
+    feedback: z.string().trim().max(1000, "Feedback darf maximal 1000 Zeichen lang sein.").optional(),
+});
