@@ -30,8 +30,18 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# --- Environment Files ---
+# Ignore local environment variables which may contain secrets
+.env*.local
+
+# Ignore production environment file (if used separately) - usually set on hosting provider
+# .env.production
+
+# Optionally, ignore the base .env file if you don't want to commit defaults/placeholders
+# If you commit .env (recommended), keep this line commented out or remove it.
+# .env
+# --- End Environment Files ---
+
 
 # vercel
 .vercel
@@ -42,3 +52,10 @@ next-env.d.ts
 
 # prompt planning
 codebase_content.txt
+
+# IDE specific
+.vscode/
+.idea/
+
+# OS specific
+Thumbs.db
