@@ -1,7 +1,20 @@
 // lib/email.ts
-import { User, UserRole, Consultation } from '@prisma/client'; // Import relevant types
+import { User, UserRole, Consultation } from '@prisma/client';
+import { Resend } from 'resend'; // <<< Import Resend
 
-// Define email content structure
+// --- Initialize Resend ---
+let resend: Resend | null = null;
+const resendApiKey = process.env.RESEND_API_KEY;
+
+if (resendApiKey) {
+    resend = new Resend(resendApiKey);
+    console.log("Resend client initialized.");
+} else {
+    console.warn("RESEND_API_KEY environment variable not found. Real email sending disabled.");
+}
+// --- ---
+
+// --- Define email content structure ---
 interface EmailOptions {
   to: string;
   subject: string;
@@ -9,27 +22,23 @@ interface EmailOptions {
   html: string; // HTML version
 }
 
-// Interface for user data passed to templates
+// --- Interfaces for template data ---
 interface UserInfo {
     email: string;
     firstName?: string | null;
     role?: UserRole;
 }
-// Interface for sender data in templates
 interface SenderInfo {
     name: string;
 }
-// Interface for consultation data in templates
 interface ConsultationInfo {
     id: string;
     topic: string;
 }
-// Interface for feedback data
 interface FeedbackInfo {
     rating: number;
     comment?: string | null;
 }
-
 
 // --- Email Templates ---
 export const templates = {
@@ -85,38 +94,56 @@ export const templates = {
 };
 
 
-// Simulated Email Sending Function (Logs to console)
+// --- Updated Email Sending Function ---
 export async function sendEmail({ to, subject, text, html }: EmailOptions): Promise<{ success: boolean; error?: string }> {
-    const emailFrom = process.env.EMAIL_FROM || 'noreply@murph.local';
+    // Check if Resend is configured and domain is likely verified
+    if (!resend || !process.env.EMAIL_FROM) {
+        const errorMsg = "Email sending is not configured (Resend API Key or EMAIL_FROM missing).";
+        console.error("Email Error:", errorMsg);
+        // Fallback to console log for local dev if needed? Or just error out.
+        console.log('\n--- EMAIL SIMULATION (Fallback due to missing config) ---');
+        console.log(`From: ${process.env.EMAIL_FROM || 'MISSING_EMAIL_FROM'}`);
+        console.log(`To: ${to}`);
+        console.log(`Subject: ${subject}`);
+        console.log('---------------------------------\n');
+        // Return failure so the caller knows the email wasn't actually sent
+        return { success: false, error: errorMsg };
+    }
 
-    if (!to || !subject || (!text && !html)) {
-        console.error('Email Error: Missing required fields (to, subject, text/html).');
+    const emailFrom = process.env.EMAIL_FROM; // e.g., "Murph App <noreply@murph-med.de>"
+
+    if (!to || !subject || !html) { // HTML is usually required by Resend
+        console.error('Email Error: Missing required fields (to, subject, html).');
         return { success: false, error: 'Missing required email fields.' };
     }
 
-    console.log('\n--- SENDING EMAIL (SIMULATION) ---');
-    console.log(`From: ${emailFrom}`);
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
-    console.log('--- Text ---');
-    console.log(text);
-    console.log('--- HTML ---');
-    console.log(html);
-    console.log('---------------------------------\n');
+    try {
+        console.log(`Attempting to send email via Resend to: ${to} | Subject: ${subject}`);
+        const { data, error } = await resend.emails.send({
+            from: emailFrom,
+            to: [to], // Resend expects 'to' to be an array
+            subject: subject,
+            html: html,
+            text: text, // Include text version as fallback
+            // Optional: Add tags for tracking in Resend dashboard
+            // tags: [
+            //     { name: 'category', value: 'user_notifications' }, // Example tag
+            // ],
+        });
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 50));
+        if (error) {
+            console.error('Resend API Error:', error);
+            // Attempt to extract a more specific message if available
+            const errorMessage = (error as any)?.message || 'Failed to send email via Resend.';
+            return { success: false, error: errorMessage };
+        }
 
-    // In a real scenario, you would use an email provider SDK here (e.g., Resend, SendGrid)
-    // try {
-    //   const { data, error } = await resend.emails.send({ from: emailFrom, to, subject, html });
-    //   if (error) { throw error; }
-    //   console.log('Email sent successfully:', data);
-    //   return { success: true };
-    // } catch (error) {
-    //   console.error('Failed to send email:', error);
-    //   return { success: false, error: 'Failed to send email' };
-    // }
+        console.log('Email sent successfully via Resend:', data);
+        return { success: true };
 
-    return { success: true }; // Return success for simulation
+    } catch (error) {
+        console.error('Unexpected error sending email:', error);
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during email sending.';
+        return { success: false, error: errorMessage };
+    }
 }
