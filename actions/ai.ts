@@ -9,17 +9,7 @@ import dotenv from 'dotenv';
 // <<< REMOVED the static import for pdf-parse >>>
 // import pdf from 'pdf-parse';
 import { Document } from '@prisma/client';
-
-// Define the categories the AI should use
-const PREDEFINED_CONSULTATION_CATEGORIES = [
-    "Befundbesprechung", // Discussing results/reports
-    "Medikamente",       // Questions about medication
-    "Symptomklärung",    // Clarifying symptoms
-    "Verfahren",         // Questions about procedures/examinations
-    "Prävention",        // Prevention/Lifestyle
-    "Verwaltung",        // Administrative questions (e.g., appointments - less common here but possible)
-    "Allgemein",         // General medical questions
-];
+import { PREDEFINED_CONSULTATION_CATEGORIES } from '@/lib/constants'; // <<< Import categories
 
 // --- AI Action Result Types ---
 interface AIActionResult {
@@ -266,7 +256,7 @@ export async function getAIClaritySafetyCheck(textToCheck: string): Promise<AIAc
 }
 
 
-// --- <<< NEW: AI Consultation Categorization Action >>> ---
+// --- <<< AI Consultation Categorization Action >>> ---
 export async function getAIConsultationCategories(
     topic: string,
     patientQuestion: string,
@@ -355,7 +345,7 @@ export async function getAIConsultationCategories(
             }
             // Filter response to only include allowed categories
             const validCategories = parsedCategories
-                .filter(cat => typeof cat === 'string' && PREDEFINED_CONSULTATION_CATEGORIES.includes(cat))
+                .filter((cat): cat is string => typeof cat === 'string' && (PREDEFINED_CONSULTATION_CATEGORIES as readonly string[]).includes(cat)) // Type assertion for includes
                 .slice(0, 3); // Limit to max 3 categories
 
             console.log(`[AI Action - fetch Categorization] Assigned categories: ${validCategories.join(', ')}`);

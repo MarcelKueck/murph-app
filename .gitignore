@@ -51,7 +51,7 @@ yarn-error.log*
 next-env.d.ts
 
 # prompt planning
-codebase_content.txt
+codebase_content.md
 
 # IDE specific
 .vscode/
