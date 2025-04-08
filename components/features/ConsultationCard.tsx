@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Clock, Loader2, User, Users, Handshake, Eye } from "lucide-react";
+import { ArrowRight, Clock, Loader2, User, Users, Handshake, Eye, Tag } from "lucide-react"; // <<< Added Tag icon
 import { ConsultationStatus, UserRole, Document } from '@prisma/client';
 import { formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -14,7 +14,7 @@ import { motion } from 'framer-motion';
 import { CONSULTATION_STATUS_LABELS, CONSULTATION_STATUS_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import AnimatedCheckmark from '@/components/ui/AnimatedCheckmark';
+import AnimatedCheckmark from '../ui/AnimatedCheckmark';
 
 type AcceptAction = (consultationId: string) => Promise<{ success: boolean; message: string; error?: any }>;
 
@@ -26,7 +26,8 @@ type ConsultationForCard = {
     createdAt: Date;
     patientQuestion?: string;
     documents?: Document[];
-    summary?: string | null; // Ensure summary is in the type
+    summary?: string | null;
+    categories?: string[] | null; // <<< Add categories field
     patient: {
         patientProfile?: {
             firstName: string;
@@ -62,7 +63,7 @@ export default function ConsultationCard({
     onPreviewClick
 }: ConsultationCardProps) {
 
-    const { id, topic, status, createdAt, student, patient, summary } = consultation;
+    const { id, topic, status, createdAt, student, patient, summary, categories } = consultation; // <<< Destructure categories
     const statusLabel = CONSULTATION_STATUS_LABELS[status] || status;
     const statusColor = CONSULTATION_STATUS_COLORS[status] || 'bg-gray-100 text-gray-800 border-gray-300';
 
@@ -82,6 +83,8 @@ export default function ConsultationCard({
 
     const isRequestForStudent = userRole === UserRole.STUDENT && status === ConsultationStatus.REQUESTED;
     const canPreview = isRequestForStudent && onPreviewClick;
+
+    const showCategories = userRole === UserRole.STUDENT || userRole === UserRole.ADMIN; // Only show categories to Student/Admin
 
   return (
      <motion.div variants={cardVariants} initial="hidden" animate="visible">
@@ -104,6 +107,17 @@ export default function ConsultationCard({
                         <User className="h-3 w-3 mr-1" /> Patient: {patientName}
                     </CardDescription>
                  )}
+                 {/* <<< Display Categories for Student/Admin >>> */}
+                 {showCategories && categories && categories.length > 0 && (
+                     <div className="flex flex-wrap gap-1 pt-1.5">
+                         {categories.map((category) => (
+                             <Badge key={category} variant="secondary" className="text-xs px-1.5 py-0">
+                                 <Tag className="h-2.5 w-2.5 mr-1"/>{category}
+                             </Badge>
+                         ))}
+                     </div>
+                 )}
+                 {/* <<< End Category Display >>> */}
                 <CardDescription className="flex items-center text-xs text-muted-foreground pt-1">
                     <Clock className="h-3 w-3 mr-1" /> {timeAgo}
                 </CardDescription>

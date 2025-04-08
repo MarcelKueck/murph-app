@@ -7,7 +7,9 @@ import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { ConsultationStatus, UserRole } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
-import { sendEmail, templates } from '@/lib/email'; // Correct import
+import { sendEmail, templates } from '@/lib/email';
+import { getAIConsultationCategories } from '@/actions/ai'; // <<< Import AI action
+import { Document } from '@prisma/client'; // <<< Import Document type
 
 export type ConsultationActionResult = {
     success: boolean;
@@ -19,7 +21,7 @@ export type ConsultationActionResult = {
 // --- Action 1: Create a New Consultation Request (by Patient) ---
 export async function createConsultation(
     values: z.infer<typeof ConsultationRequestSchema>,
-    documents: UploadedDocument[]
+    documents: UploadedDocument[] // This is the client-side type
 ): Promise<ConsultationActionResult> {
 
     const session = await auth();
@@ -45,12 +47,42 @@ export async function createConsultation(
     const { topic, patientQuestion } = validatedFields.data;
 
     try {
+        // --- <<< AI Categorization Start >>> ---
+        let assignedCategories: string[] = [];
+        // Prepare document data structure expected by AI action (needs storageUrl)
+        const docsForAI: Document[] = documents.map(d => ({
+           id: d.uploadId, // Use temporary ID or find a way to link later if needed
+           consultationId: 'TEMP', // Not known yet
+           uploaderId: patientId,
+           fileName: d.fileName,
+           storageUrl: d.storageUrl,
+           mimeType: d.mimeType,
+           fileSize: d.fileSize ?? null,
+           createdAt: new Date(), // Placeholder date
+        }));
+
+        try {
+             const aiResult = await getAIConsultationCategories(topic, patientQuestion, docsForAI);
+             if (aiResult.success && aiResult.data?.categories) {
+                 assignedCategories = aiResult.data.categories;
+                 console.log(`[AI Categorization] Success for potential consultation: Categories [${assignedCategories.join(', ')}]`);
+             } else {
+                 console.warn(`[AI Categorization] Failed or no categories returned for potential consultation: ${aiResult.message}`);
+                 // Decide if failure should prevent creation or just log. Log for now.
+             }
+         } catch (aiError) {
+             console.error(`[AI Categorization] Error during AI call:`, aiError);
+             // Log error but proceed with consultation creation without categories
+         }
+        // --- <<< AI Categorization End >>> ---
+
         const newConsultation = await prisma.consultation.create({
             data: {
                 patientId: patientId,
                 topic: topic,
                 patientQuestion: patientQuestion,
                 status: ConsultationStatus.REQUESTED,
+                categories: assignedCategories, // <<< Save categories
                 ...(documents.length > 0 && {
                     documents: {
                         create: documents.map(doc => ({
@@ -67,22 +99,22 @@ export async function createConsultation(
 
         console.log(`Consultation created successfully: ID ${newConsultation.id} for user ${patientId}`);
 
-        // <<< Send Request Confirmation Email >>>
+        // Send Request Confirmation Email
         const templateData = templates.requestConfirmation(
-            { email: patientUser.email, firstName: patientUser.patientProfile?.firstName },
-            { id: newConsultation.id, topic: newConsultation.topic }
-        );
-        await sendEmail({
-            to: patientUser.email,
-            subject: templateData.subject,
-            text: templateData.text,
-            html: templateData.html,
-        }).catch(err => {
-            console.error(`Failed to send confirmation email for consultation ${newConsultation.id}:`, err);
-        });
-        // <<< End Email Sending >>>
+           { email: patientUser.email, firstName: patientUser.patientProfile?.firstName },
+           { id: newConsultation.id, topic: newConsultation.topic }
+       );
+       await sendEmail({
+           to: patientUser.email,
+           subject: templateData.subject,
+           text: templateData.text,
+           html: templateData.html,
+       }).catch(err => {
+           console.error(`Failed to send confirmation email for consultation ${newConsultation.id}:`, err);
+       });
 
         revalidatePath('/patient/dashboard');
+        revalidatePath('/student/dashboard'); // Revalidate student dashboard as well
 
         return {
             success: true,
