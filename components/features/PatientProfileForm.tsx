@@ -15,22 +15,24 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { updateProfile } from '@/actions/profile'; // Import the action
+import { updateProfile } from '@/actions/profile';
 import ProfilePictureUpload from './ProfilePictureUpload';
 import AnimatedCheckmark from '../ui/AnimatedCheckmark';
-import { PatientProfile, User } from '@prisma/client'; // Import types
-import { useSession } from 'next-auth/react'; // Import useSession
+import { PatientProfile, User } from '@prisma/client';
+import { useSession } from 'next-auth/react';
+import DeleteAccountDialog from './DeleteAccountDialog'; // <<< Import Dialog
+import { Separator } from '@/components/ui/separator'; // <<< Import Separator
+
 
 interface PatientProfileFormProps {
-  user: User & { patientProfile: PatientProfile | null }; // Pass combined user/profile data
+  user: User & { patientProfile: PatientProfile | null };
 }
 
 export default function PatientProfileForm({ user }: PatientProfileFormProps) {
-  const { update: updateSession } = useSession(); // Get update function
+  const { update: updateSession } = useSession();
   const [isPending, startTransition] = useTransition();
   const [showSuccess, setShowSuccess] = useState(false);
-  // State to hold the URL of a newly uploaded image *before* saving the profile
-  const [newImageUrl, setNewImageUrl] = useState<string | null | undefined>(undefined); // undefined = no change, null = remove, string = new URL
+  const [newImageUrl, setNewImageUrl] = useState<string | null | undefined>(undefined);
 
   const form = useForm<UpdatePatientProfileFormData>({
     resolver: zodResolver(UpdatePatientProfileSchema),
@@ -92,102 +94,120 @@ export default function PatientProfileForm({ user }: PatientProfileFormProps) {
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <ProfilePictureUpload
-            initialImageUrl={newImageUrl === undefined ? user.image : newImageUrl} // Show user image or the staged new one
-            initials={initials}
-            onUploadComplete={handlePictureUpload}
-            onRemovePicture={handlePictureRemove}
-            disabled={isPending || showSuccess}
-        />
+    // Wrap everything in a fragment or div if needed
+    <>
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <ProfilePictureUpload
+                    initialImageUrl={newImageUrl === undefined ? user.image : newImageUrl} // Show user image or the staged new one
+                    initials={initials}
+                    onUploadComplete={handlePictureUpload}
+                    onRemovePicture={handlePictureRemove}
+                    disabled={isPending || showSuccess}
+                 />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <FormField
-                control={form.control}
-                name="firstName"
-                render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Vorname</FormLabel>
-                        <FormControl>
-                            <Input placeholder="Max" {...field} disabled={isPending || showSuccess} />
-                        </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )}
-            />
-             <FormField
-                control={form.control}
-                name="lastName"
-                render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Nachname</FormLabel>
-                        <FormControl>
-                            <Input placeholder="Mustermann" {...field} disabled={isPending || showSuccess} />
-                        </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )}
-            />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                        control={form.control}
+                        name="firstName"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Vorname</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="Max" {...field} disabled={isPending || showSuccess} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                     />
+                    <FormField
+                        control={form.control}
+                        name="lastName"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Nachname</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="Mustermann" {...field} disabled={isPending || showSuccess} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                     />
+                </div>
+
+                <FormField
+                    control={form.control}
+                    name="dob"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                            <FormLabel>Geburtsdatum (Optional)</FormLabel>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <FormControl>
+                                        <Button
+                                            type="button"
+                                            variant={"outline"}
+                                            className={cn(
+                                                "w-[240px] pl-3 text-left font-normal",
+                                                !field.value && "text-muted-foreground"
+                                            )}
+                                            disabled={isPending || showSuccess}
+                                        >
+                                            {field.value ? (
+                                                format(field.value, "PPP", { locale: de })
+                                            ) : (
+                                                <span>Wähle ein Datum</span>
+                                            )}
+                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                        </Button>
+                                    </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="single"
+                                        selected={field.value ?? undefined}
+                                        onSelect={field.onChange}
+                                        disabled={(date) =>
+                                            date > new Date() || date < new Date("1900-01-01") || isPending || showSuccess
+                                        }
+                                        initialFocus
+                                        captionLayout="dropdown-buttons"
+                                        fromYear={1920}
+                                        toYear={new Date().getFullYear()}
+                                        locale={de}
+                                    />
+                                </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                 />
+
+                <Button type="submit" disabled={isPending || showSuccess} animateInteraction={!isPending && !showSuccess}>
+                     {showSuccess ? (
+                        <AnimatedCheckmark />
+                    ) : isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    {!showSuccess && 'Profil speichern'}
+                </Button>
+            </form>
+        </Form>
+
+        {/* --- Danger Zone --- */}
+        <Separator className="my-8" />
+        <div className="space-y-4 rounded-lg border border-destructive bg-destructive/5 p-4">
+            <h3 className="text-lg font-semibold text-destructive">Gefahrenzone</h3>
+            <p className="text-sm text-destructive/90">
+                 Das Löschen Ihres Kontos ist endgültig und kann nicht rückgängig gemacht werden.
+                 Alle Ihre Daten, einschließlich Beratungsverläufe und hochgeladener Dokumente, werden dauerhaft entfernt.
+            </p>
+             <DeleteAccountDialog userEmail={user.email}>
+                 <Button variant="destructive" disabled={isPending}>
+                     Mein Konto dauerhaft löschen
+                 </Button>
+             </DeleteAccountDialog>
         </div>
-
-         <FormField
-            control={form.control}
-            name="dob"
-            render={({ field }) => (
-                <FormItem className="flex flex-col">
-                    <FormLabel>Geburtsdatum (Optional)</FormLabel>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <FormControl>
-                                <Button
-                                    type="button"
-                                    variant={"outline"}
-                                    className={cn(
-                                        "w-[240px] pl-3 text-left font-normal",
-                                        !field.value && "text-muted-foreground"
-                                    )}
-                                    disabled={isPending || showSuccess}
-                                >
-                                    {field.value ? (
-                                        format(field.value, "PPP", { locale: de })
-                                    ) : (
-                                        <span>Wähle ein Datum</span>
-                                    )}
-                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
-                            </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                                mode="single"
-                                selected={field.value ?? undefined}
-                                onSelect={field.onChange}
-                                disabled={(date) =>
-                                    date > new Date() || date < new Date("1900-01-01") || isPending || showSuccess
-                                }
-                                initialFocus
-                                captionLayout="dropdown-buttons"
-                                fromYear={1920}
-                                toYear={new Date().getFullYear()}
-                                locale={de}
-                            />
-                        </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                </FormItem>
-            )}
-        />
-
-        <Button type="submit" disabled={isPending || showSuccess} animateInteraction={!isPending && !showSuccess}>
-             {showSuccess ? (
-                <AnimatedCheckmark />
-            ) : isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : null}
-            {!showSuccess && 'Profil speichern'}
-        </Button>
-      </form>
-    </Form>
+    </>
   );
 }

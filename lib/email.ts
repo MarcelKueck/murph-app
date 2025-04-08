@@ -40,30 +40,28 @@ export const templates = {
   }),
   passwordReset: (user: UserInfo, resetLink: string) => ({
     subject: 'Ihr Passwort-Reset für Murph',
-    text: `Hallo ${user.firstName || 'Nutzer'},\n\nSie haben angefordert, Ihr Passwort zurückzusetzen... Link (gültig für 1 Stunde):\n${resetLink}\n\n...`,
-    html: `<p>Hallo ${user.firstName || 'Nutzer'},</p><p>... Link (gültig für 1 Stunde):</p><p><a href="${resetLink}">${resetLink}</a></p><p>...`,
+    text: `Hallo ${user.firstName || 'Nutzer'},\n\nSie haben angefordert, Ihr Passwort zurückzusetzen. Bitte klicken Sie auf den folgenden Link, um ein neues Passwort festzulegen (dieser Link ist 1 Stunde gültig):\n${resetLink}\n\nWenn Sie dies nicht angefordert haben, können Sie diese E-Mail ignorieren.\n\nMit freundlichen Grüßen,\nIhr Murph Team`,
+    html: `<p>Hallo ${user.firstName || 'Nutzer'},</p><p>Sie haben angefordert, Ihr Passwort zurückzusetzen. Bitte klicken Sie auf den folgenden Link, um ein neues Passwort festzulegen (dieser Link ist 1 Stunde gültig):</p><p><a href="${resetLink}">${resetLink}</a></p><p>Wenn Sie dies nicht angefordert haben, können Sie diese E-Mail ignorieren.</p><p>Mit freundlichen Grüßen,<br/>Ihr Murph Team</p>`,
   }),
   consultationCompleted: (patient: UserInfo, consultation: ConsultationInfo, feedbackLink: string) => ({
     subject: `Ihre Murph-Beratung "${consultation.topic}" wurde abgeschlossen`,
-    text: `Hallo ${patient.firstName || 'Nutzer'},\n\nIhre Beratung zum Thema "${consultation.topic}" wurde abgeschlossen...\nDashboard: ${process.env.NEXT_PUBLIC_APP_BASE_URL}/patient/beratungen/${consultation.id}\n\nFeedback:\n${feedbackLink}\n\n...`,
-    html: `<p>Hallo ${patient.firstName || 'Nutzer'},</p><p>... <a href="${process.env.NEXT_PUBLIC_APP_BASE_URL}/patient/beratungen/${consultation.id}">hier einsehen</a>.</p><p>... <a href="${feedbackLink}">Feedback geben</a> ...</p><p>...`,
+    text: `Hallo ${patient.firstName || 'Nutzer'},\n\nIhre Beratung zum Thema "${consultation.topic}" wurde abgeschlossen. Sie können die Zusammenfassung und den Verlauf unter folgendem Link einsehen:\n${process.env.NEXT_PUBLIC_APP_BASE_URL}/patient/beratungen/${consultation.id}\n\nWir würden uns sehr über Ihr Feedback freuen:\n${feedbackLink}\n\nMit freundlichen Grüßen,\nIhr Murph Team`,
+    html: `<p>Hallo ${patient.firstName || 'Nutzer'},</p><p>Ihre Beratung zum Thema "${consultation.topic}" wurde abgeschlossen. Sie können die Zusammenfassung und den Verlauf <a href="${process.env.NEXT_PUBLIC_APP_BASE_URL}/patient/beratungen/${consultation.id}">hier einsehen</a>.</p><p>Wir würden uns sehr über <a href="${feedbackLink}">Ihr Feedback</a> freuen, um Murph weiter zu verbessern.</p><p>Mit freundlichen Grüßen,<br/>Ihr Murph Team</p>`,
   }),
   newMessage: (recipient: UserInfo, sender: SenderInfo, consultation: ConsultationInfo) => {
       const dashboardPath = recipient.role === UserRole.PATIENT ? 'patient' : recipient.role === UserRole.STUDENT ? 'student' : '';
       const messageLink = `${process.env.NEXT_PUBLIC_APP_BASE_URL}/${dashboardPath}/beratungen/${consultation.id}`;
       return {
           subject: `Neue Nachricht in Ihrer Murph-Beratung "${consultation.topic}"`,
-          text: `Hallo ${recipient.firstName || 'Nutzer'},\n\nSie haben eine neue Nachricht von ${sender.name} in Ihrer Beratung "${consultation.topic}" erhalten.\n\nLink: ${messageLink}\n\n...`,
-          html: `<p>Hallo ${recipient.firstName || 'Nutzer'},</p><p>Neue Nachricht von ${sender.name} in Beratung "${consultation.topic}".</p><p><a href="${messageLink}">Nachricht ansehen</a>.</p><p>...`,
+          text: `Hallo ${recipient.firstName || 'Nutzer'},\n\nSie haben eine neue Nachricht von ${sender.name} in Ihrer Beratung "${consultation.topic}" erhalten.\n\nKlicken Sie hier, um die Nachricht zu lesen:\n${messageLink}\n\nMit freundlichen Grüßen,\nIhr Murph Team`,
+          html: `<p>Hallo ${recipient.firstName || 'Nutzer'},</p><p>Sie haben eine neue Nachricht von ${sender.name} in Ihrer Beratung "${consultation.topic}" erhalten.</p><p>Klicken Sie <a href="${messageLink}">hier, um die Nachricht zu lesen</a>.</p><p>Mit freundlichen Grüßen,<br/>Ihr Murph Team</p>`,
       };
   },
   studentVerified: (student: UserInfo) => ({
     subject: 'Ihr Murph Studentenprofil wurde verifiziert!',
-    text: `Hallo ${student.firstName || 'Nutzer'},\n\nGute Nachrichten! Ihr Profil wurde verifiziert.\n\nLink zum Dashboard: ${process.env.NEXT_PUBLIC_APP_BASE_URL}/student/dashboard\n\n...`,
-    html: `<p>Hallo ${student.firstName || 'Nutzer'},</p><p>Gute Nachrichten! Profil verifiziert.</p><p><a href="${process.env.NEXT_PUBLIC_APP_BASE_URL}/student/dashboard">Anfragen annehmen</a>.</p><p>...`,
+    text: `Hallo ${student.firstName || 'Nutzer'},\n\nGute Nachrichten! Ihr Profil als Medizinstudent*in bei Murph wurde erfolgreich verifiziert. Sie können nun offene Beratungsanfragen von Patienten annehmen.\n\nZum Dashboard: ${process.env.NEXT_PUBLIC_APP_BASE_URL}/student/dashboard\n\nViel Erfolg!\nIhr Murph Team`,
+    html: `<p>Hallo ${student.firstName || 'Nutzer'},</p><p>Gute Nachrichten! Ihr Profil als Medizinstudent*in bei Murph wurde erfolgreich verifiziert. Sie können nun offene Beratungsanfragen von Patienten <a href="${process.env.NEXT_PUBLIC_APP_BASE_URL}/student/dashboard">in Ihrem Dashboard</a> annehmen.</p><p>Viel Erfolg!<br/>Ihr Murph Team</p>`,
   }),
-
-  // <<< NEW TEMPLATES >>>
   requestConfirmation: (patient: UserInfo, consultation: ConsultationInfo) => ({
     subject: `Ihre Murph-Anfrage "${consultation.topic}" wurde empfangen`,
     text: `Hallo ${patient.firstName || 'Nutzer'},\n\nVielen Dank für Ihre Anfrage zum Thema "${consultation.topic}".\n\nWir haben sie erhalten und suchen nun einen passenden Medizinstudenten für Sie. Sie werden benachrichtigt, sobald Ihre Anfrage angenommen wurde.\n\nSie können den Status Ihrer Anfragen hier einsehen: ${process.env.NEXT_PUBLIC_APP_BASE_URL}/patient/dashboard\n\nMit freundlichen Grüßen,\nIhr Murph Team`,
@@ -79,7 +77,11 @@ export const templates = {
     text: `Hallo ${student.firstName || 'Nutzer'},\n\nSie haben neues Feedback von ${patient.name} für Ihre abgeschlossene Beratung "${consultation.topic}" erhalten.\n\nBewertung: ${feedback.rating}/5\n${feedback.comment ? `Kommentar: ${feedback.comment}\n` : ''}\nSie können das Feedback und die Beratung hier einsehen:\n${process.env.NEXT_PUBLIC_APP_BASE_URL}/student/beratungen/${consultation.id}\n\nMit freundlichen Grüßen,\nIhr Murph Team`,
     html: `<p>Hallo ${student.firstName || 'Nutzer'},</p><p>Sie haben neues Feedback von ${patient.name} für Ihre abgeschlossene Beratung "${consultation.topic}" erhalten.</p><p><b>Bewertung: ${feedback.rating}/5</b></p>${feedback.comment ? `<p><b>Kommentar:</b> ${feedback.comment}</p>` : ''}<p>Sie können das Feedback und die Beratung <a href="${process.env.NEXT_PUBLIC_APP_BASE_URL}/student/beratungen/${consultation.id}">hier einsehen</a>.</p><p>Mit freundlichen Grüßen,<br/>Ihr Murph Team</p>`,
   }),
-  // <<< END NEW TEMPLATES >>>
+  accountDeleted: (user: UserInfo) => ({
+    subject: 'Ihr Murph-Konto wurde gelöscht',
+    text: `Hallo,\n\nIhr Benutzerkonto (${user.email}) bei Murph wurde wunschgemäß dauerhaft gelöscht.\n\nAlle Ihre persönlichen Daten und Beratungsverläufe wurden entfernt.\n\nWir bedauern Ihre Entscheidung und danken Ihnen für die Nutzung von Murph.\n\nMit freundlichen Grüßen,\nIhr Murph Team`,
+    html: `<p>Hallo,</p><p>Ihr Benutzerkonto (<code>${user.email}</code>) bei Murph wurde wunschgemäß dauerhaft gelöscht.</p><p>Alle Ihre persönlichen Daten und Beratungsverläufe wurden entfernt.</p><p>Wir bedauern Ihre Entscheidung und danken Ihnen für die Nutzung von Murph.</p><p>Mit freundlichen Grüßen,<br/>Ihr Murph Team</p>`,
+  }),
 };
 
 
@@ -102,7 +104,19 @@ export async function sendEmail({ to, subject, text, html }: EmailOptions): Prom
     console.log(html);
     console.log('---------------------------------\n');
 
+    // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    return { success: true };
+    // In a real scenario, you would use an email provider SDK here (e.g., Resend, SendGrid)
+    // try {
+    //   const { data, error } = await resend.emails.send({ from: emailFrom, to, subject, html });
+    //   if (error) { throw error; }
+    //   console.log('Email sent successfully:', data);
+    //   return { success: true };
+    // } catch (error) {
+    //   console.error('Failed to send email:', error);
+    //   return { success: false, error: 'Failed to send email' };
+    // }
+
+    return { success: true }; // Return success for simulation
 }

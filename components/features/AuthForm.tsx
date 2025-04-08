@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, Eye, EyeOff } from "lucide-react"; // <<< Import Eye icons
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { de } from 'date-fns/locale';
@@ -46,6 +46,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
     const [isPending, startTransition] = useTransition();
     const [showSuccess, setShowSuccess] = useState(false);
     const [showStudentFields, setShowStudentFields] = useState(false);
+    const [showPassword, setShowPassword] = useState(false); // <<< State for password visibility
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false); // <<< State for confirm password visibility
 
     const currentSchema = mode === 'login' ? LoginSchema : RegisterSchema;
 
@@ -115,6 +117,9 @@ export default function AuthForm({ mode }: AuthFormProps) {
             }
         });
     };
+
+    const togglePasswordVisibility = () => setShowPassword(!showPassword);
+    const toggleConfirmPasswordVisibility = () => setShowConfirmPassword(!showConfirmPassword);
 
     return (
         <Form {...form}>
@@ -283,9 +288,29 @@ export default function AuthForm({ mode }: AuthFormProps) {
                     render={({ field }) => (
                         <FormItem>
                             <FormLabel>Passwort</FormLabel>
-                            <FormControl>
-                                <Input type="password" placeholder="********" {...field} disabled={isPending || showSuccess} />
-                            </FormControl>
+                            <div className="relative">
+                                <FormControl>
+                                    <Input
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="********"
+                                        {...field}
+                                        disabled={isPending || showSuccess}
+                                        className="pr-10" // Add padding for the icon button
+                                    />
+                                </FormControl>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    onClick={togglePasswordVisibility}
+                                    disabled={isPending || showSuccess}
+                                    tabIndex={-1} // Prevent tabbing to the button
+                                >
+                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                    <span className="sr-only">{showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}</span>
+                                </Button>
+                            </div>
                             {mode === 'register' && <FormDescription>Mindestens 8 Zeichen.</FormDescription>}
                             <FormMessage />
                         </FormItem>
@@ -299,9 +324,29 @@ export default function AuthForm({ mode }: AuthFormProps) {
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Passwort bestätigen</FormLabel>
-                                <FormControl>
-                                    <Input type="password" placeholder="********" {...field} disabled={isPending || showSuccess} />
-                                </FormControl>
+                                <div className="relative">
+                                    <FormControl>
+                                        <Input
+                                            type={showConfirmPassword ? "text" : "password"}
+                                            placeholder="********"
+                                            {...field}
+                                            disabled={isPending || showSuccess}
+                                            className="pr-10"
+                                        />
+                                    </FormControl>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                        onClick={toggleConfirmPasswordVisibility}
+                                        disabled={isPending || showSuccess}
+                                        tabIndex={-1}
+                                    >
+                                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                        <span className="sr-only">{showConfirmPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}</span>
+                                    </Button>
+                                </div>
                                 <FormMessage />
                             </FormItem>
                         )}

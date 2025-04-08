@@ -9,7 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react'; // <<< Import Eye icons
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation'; // Import search params hook
@@ -27,6 +27,8 @@ export default function ResetPasswordPage() {
     const [isPending, startTransition] = useTransition();
     const [showSuccess, setShowSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null); // State for token validation errors
+    const [showPassword, setShowPassword] = useState(false); // <<< State for password visibility
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false); // <<< State for confirm password visibility
 
     const form = useForm<FormData>({
         resolver: zodResolver(ResetPasswordSchema),
@@ -72,6 +74,9 @@ export default function ResetPasswordPage() {
         });
     };
 
+    const togglePasswordVisibility = () => setShowPassword(!showPassword);
+    const toggleConfirmPasswordVisibility = () => setShowConfirmPassword(!showConfirmPassword);
+
     // Disable form if token is invalid/missing
     const isFormDisabled = isPending || showSuccess || !token || !!error;
 
@@ -97,9 +102,29 @@ export default function ResetPasswordPage() {
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Neues Passwort</FormLabel>
-                                        <FormControl>
-                                            <Input type="password" placeholder="********" {...field} disabled={isFormDisabled} />
-                                        </FormControl>
+                                        <div className="relative">
+                                            <FormControl>
+                                                <Input
+                                                    type={showPassword ? "text" : "password"}
+                                                    placeholder="********"
+                                                    {...field}
+                                                    disabled={isFormDisabled}
+                                                    className="pr-10"
+                                                />
+                                            </FormControl>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                                onClick={togglePasswordVisibility}
+                                                disabled={isFormDisabled}
+                                                tabIndex={-1}
+                                            >
+                                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                <span className="sr-only">{showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}</span>
+                                            </Button>
+                                        </div>
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -110,9 +135,29 @@ export default function ResetPasswordPage() {
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Neues Passwort bestätigen</FormLabel>
-                                        <FormControl>
-                                            <Input type="password" placeholder="********" {...field} disabled={isFormDisabled} />
-                                        </FormControl>
+                                        <div className="relative">
+                                            <FormControl>
+                                                <Input
+                                                    type={showConfirmPassword ? "text" : "password"}
+                                                    placeholder="********"
+                                                    {...field}
+                                                    disabled={isFormDisabled}
+                                                    className="pr-10"
+                                                />
+                                            </FormControl>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                                onClick={toggleConfirmPasswordVisibility}
+                                                disabled={isFormDisabled}
+                                                tabIndex={-1}
+                                            >
+                                                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                <span className="sr-only">{showConfirmPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}</span>
+                                            </Button>
+                                        </div>
                                         <FormMessage />
                                     </FormItem>
                                 )}

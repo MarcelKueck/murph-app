@@ -10,6 +10,7 @@ import dotenv from 'dotenv';
 // import pdf from 'pdf-parse';
 import { Document } from '@prisma/client';
 import { PREDEFINED_CONSULTATION_CATEGORIES } from '@/lib/constants'; // <<< Import categories
+import prisma from "@/lib/prisma"; // <<< Import prisma
 
 // --- AI Action Result Types ---
 interface AIActionResult {
@@ -188,21 +189,90 @@ export async function getAIJargonExplanation(term: string): Promise<AIActionResu
 }
 
 
-// --- Chat Summary Draft Action ---
-interface ChatEntry { sender: { role: UserRole }; content: string; }
-export async function getAIChatSummaryDraft(chatHistory: ChatEntry[]): Promise<AIActionResult> {
+// --- <<< Chat Summary Draft Action (MODIFIED) >>> ---
+export async function getAIChatSummaryDraft(consultationId: string): Promise<AIActionResult> {
     const session = await auth();
-    if (!session?.user?.id || session.user.role !== UserRole.STUDENT) { return { success: false, message: "Nur Studenten können Zusammenfassungen entwerfen.", data: null }; }
-    if (!geminiModel) { initializeGemini(); if(!geminiModel) return { success: false, message: "AI-Modell ist nicht verfügbar.", data: null }; }
-    if (!chatHistory || chatHistory.length === 0) { return { success: false, message: "Chatverlauf ist leer.", data: null }; }
+    if (!session?.user?.id || session.user.role !== UserRole.STUDENT) {
+        return { success: false, message: "Nur Studenten können Zusammenfassungen entwerfen.", data: null };
+    }
+    if (!geminiModel) {
+        initializeGemini();
+        if(!geminiModel) return { success: false, message: "AI-Modell ist nicht verfügbar.", data: null };
+    }
+    if (!consultationId) {
+        return { success: false, message: "Beratungs-ID fehlt.", data: null };
+    }
 
+   // --- Fetch Consultation Data (Messages & Documents) ---
+   let consultationData;
+   try {
+       consultationData = await prisma.consultation.findUnique({
+           where: { id: consultationId },
+           select: {
+               messages: {
+                   orderBy: { createdAt: 'asc' },
+                   include: { sender: { select: { role: true } } } // Fetch sender role for formatting
+               },
+               documents: {
+                   select: { fileName: true, storageUrl: true, mimeType: true } // Fetch needed document fields
+               }
+           }
+       });
+   } catch (dbError) {
+       console.error(`[AI Summary Draft] Error fetching consultation data for ${consultationId}:`, dbError);
+       return { success: false, message: "Fehler beim Abrufen der Beratungsdaten.", data: null };
+   }
+
+   if (!consultationData) {
+       return { success: false, message: "Beratung nicht gefunden.", data: null };
+   }
+   const { messages, documents } = consultationData;
+   // --- End Fetch ---
+
+   if (!messages || messages.length === 0) {
+        return { success: false, message: "Chatverlauf ist leer.", data: null };
+    }
+
+    // --- Format Chat History ---
     let formattedHistory = "";
-    try { chatHistory.forEach(entry => { if (!entry?.sender?.role || typeof entry.content !== 'string') { throw new Error(`Invalid chat entry: ${JSON.stringify(entry)}`); } const prefix = entry.sender.role === UserRole.PATIENT ? "P:" : "S:"; formattedHistory += `${prefix} ${entry.content.trim()}\n`; }); }
+   try {
+       messages.forEach(msg => {
+           if (!msg?.sender?.role || typeof msg.content !== 'string') { throw new Error(`Invalid message entry: ${JSON.stringify(msg)}`); }
+           const prefix = msg.sender.role === UserRole.PATIENT ? "P:" : "S:";
+           formattedHistory += `${prefix} ${msg.content.trim()}\n`;
+       });
+   }
     catch (formatError: any) { console.error("Error formatting chat history:", formatError); return { success: false, message: "Fehler beim Verarbeiten des Chatverlaufs.", data: null }; }
+   // --- End Format Chat History ---
+
+   // --- Extract Document Context ---
+   let documentContext = "";
+   const pdfDocuments = documents.filter(doc => doc.mimeType === 'application/pdf' && doc.storageUrl);
+   if (pdfDocuments.length > 0) {
+       console.log(`[AI Summary Draft] Processing ${pdfDocuments.length} PDF(s) for context.`);
+       for (const doc of pdfDocuments) {
+           const text = await extractTextFromPdfUrl(doc.storageUrl);
+           if (text) {
+               documentContext += `\n\nKontext aus Dokument (${doc.fileName}):\n${text.substring(0, 1000)}...`; // Limit context per doc
+           }
+       }
+       documentContext = documentContext.substring(0, 5000); // Limit total document context
+   }
+   // --- End Document Context ---
 
     const modelName = "gemini-1.5-flash";
     const apiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
-    const prompt = `Du bist ein KI-Assistent für Medizinstudenten. Erstelle eine neutrale, sachliche Zusammenfassung (max. 150 Wörter, Deutsch) der folgenden Chat-Konversation zwischen Patient (P) und Student (S) für die interne Dokumentation des Studenten. Gib keine eigene medizinische Bewertung oder Empfehlung ab. Konversation:\n\n${formattedHistory}`;
+
+   // --- Updated Prompt ---
+   const prompt = `Du bist ein KI-Assistent für Medizinstudenten. Erstelle eine neutrale, sachliche Zusammenfassung (max. 150 Wörter, Deutsch) für die interne Dokumentation des Studenten. Berücksichtige dabei SOWOHL die folgende Chat-Konversation (P: Patient, S: Student) ALS AUCH den Kontext aus eventuell angehängten Dokumenten. Gib keine eigene medizinische Bewertung oder Empfehlung ab.
+
+Chat-Konversation:
+${formattedHistory}
+${documentContext ? `\nKontext aus Dokumenten:${documentContext}` : ''}
+
+Zusammenfassung:`;
+   // --- End Updated Prompt ---
+
     const requestBody = { contents: [{ parts: [{ text: prompt }] }] };
     const apiKey = getApiKeyFromEnvLocal(); if (!apiKey) return { success: false, message: "AI-Konfigurationsfehler.", data: null };
     const headers = { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey, 'User-Agent': 'MurphApp/1.0 (Node.js fetch)' };
@@ -210,12 +280,23 @@ export async function getAIChatSummaryDraft(chatHistory: ChatEntry[]): Promise<A
     try {
         // console.log(`[AI Action - fetch] Requesting chat summary draft...`);
         const response = await fetch(apiEndpoint, { method: 'POST', headers: headers, body: JSON.stringify(requestBody) });
-        if (!response.ok) { /* ... Basic error handling ... */ let e = await response.text(); console.error(`API Error ${response.status}`,e); return {success:false, message:`Fehler ${response.status}`, data: null} }
+       if (!response.ok) {
+           let e = await response.text(); console.error(`[AI Summary Draft] API Error ${response.status}:`,e);
+           return {success:false, message:`Fehler von AI-Service (${response.status})`, data: null}
+       }
         const data = await response.json();
         const summaryDraft = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!summaryDraft?.trim()) { const r = data?.candidates?.[0]?.finishReason; console.warn(`Empty summary. Reason: ${r}`); return {success:false, message:"Zusammenfassung konnte nicht generiert werden.", data: null}}
-        return { success: true, message: summaryDraft.trim(), data: null };
-    } catch (error: any) { console.error("[AI Action - fetch] Error fetching summary draft:", error); return {success:false, message:"Netzwerkfehler bei AI-Anfrage.", data: null}}
+       if (!summaryDraft?.trim()) {
+           const r = data?.candidates?.[0]?.finishReason;
+           console.warn(`[AI Summary Draft] Empty summary. Reason: ${r}`);
+           return {success:false, message:"Zusammenfassung konnte nicht generiert werden.", data: null}
+       }
+       console.log(`[AI Summary Draft] Successfully generated draft for consultation ${consultationId}.`);
+       return { success: true, message: summaryDraft.trim(), data: null }; // Return summary in message field
+   } catch (error: any) {
+       console.error(`[AI Summary Draft] Network or processing error for ${consultationId}:`, error);
+       return {success:false, message:"Netzwerkfehler bei AI-Anfrage.", data: null}
+   }
 }
 
 

@@ -152,7 +152,6 @@ model Document {
   @@index([uploaderId])
 }
 
-// <<< ADD PasswordResetToken Model >>>
 model PasswordResetToken {
   id        String   @id @default(cuid())
   userId    String
@@ -163,4 +162,15 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model DeletionFeedback {
+  id           String   @id @default(cuid())
+  userId       String?  // User ID *before* deletion, can be null if needed, but good for tracking
+  userEmail    String   // Store email as user record will be gone
+  feedback     String?  @db.Text // The optional feedback text
+  deletedAt    DateTime @default(now()) // Timestamp when feedback was recorded/deletion occurred
+
+  @@index([userEmail])
+  @@index([deletedAt])
 }
