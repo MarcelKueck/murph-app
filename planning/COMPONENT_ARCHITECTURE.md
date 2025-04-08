@@ -2,74 +2,61 @@
 
 ## 1. Philosophy
 
-*   Leverage Shadcn/ui primitives extensively. *(Confirmed)*
-*   Apply custom styles via Tailwind CSS (`cn` utility). *(Confirmed)*
+*   Leverage Shadcn/ui primitives. *(Confirmed)*
+*   Apply custom styles via Tailwind CSS. *(Confirmed)*
 *   Organize components logically: `ui`, `core`, `features`, `admin`. *(Confirmed)*
-*   Utilize Framer Motion for meaningful interactions/animations. *(Partially Implemented)*
+*   Utilize Framer Motion for interactions/animations. *(Partially Implemented)*
 *   Prioritize reusability and maintainability. *(Ongoing)*
 
 ## 2. Component Breakdown & Status
 
 ### `/components/ui` (Shadcn Primitives - Implemented as needed)
-
-*   `alert.tsx`, `avatar.tsx`, `badge.tsx`, `button.tsx`, `calendar.tsx`, `card.tsx`, `dialog.tsx`, `dropdown-menu.tsx`, `form.tsx`, `input.tsx`, `label.tsx`, `popover.tsx`, `progress.tsx`, `radio-group.tsx`, `scroll-area.tsx`, `select.tsx`, `skeleton.tsx`, `sonner.tsx`, `table.tsx`, `tabs.tsx`, `textarea.tsx`
+*   (List of Shadcn components used)
 
 ### `/components/core` (App-wide Components - Implemented)
-
-*   `Footer.tsx`: Implemented.
-*   `Header.tsx`: Implemented (needs logo size adjustment).
-*   `Logo.tsx`: Implemented (with draw animation).
-*   `NextAuthProvider.tsx`: Implemented.
-*   `TrustBadge.tsx`: Implemented.
-*   `LoadingSpinner.tsx`: Implemented (available, not widely used yet).
-*   `UserMenuButton.tsx`: Implemented (shared between Header and Admin Layout).
-*   `PageTransitionWrapper.tsx`: Implemented (basic page fade).
+*   `Footer.tsx`, `Header.tsx`, `Logo.tsx`, `NextAuthProvider.tsx`, `TrustBadge.tsx`, `LoadingSpinner.tsx`, `UserMenuButton.tsx`, `PageTransitionWrapper.tsx`
 
 ### `/components/features` (Feature-Specific Components - Implemented)
-
 *   **Authentication:**
-    *   `AuthForm.tsx`: Implemented (Login/Register, needs password visibility toggle).
+    *   `AuthForm.tsx`: Implemented.
+    *   (New Components Needed: `ForgotPasswordForm`, `ResetPasswordForm` - currently implemented as pages)
 *   **Consultation:**
-    *   `ConsultationCard.tsx`: Implemented (handles display, preview trigger, needs interaction consistency review).
-    *   `ConsultationsSection.tsx`: Implemented (client component, handles list display, animation trigger, preview dialog state).
-    *   `ConsultationRequestForm.tsx`: Implemented (includes FileUpload).
-    *   `FileUpload.tsx`: Implemented (Vercel Blob client).
-    *   `ConsultationPreviewDialog.tsx`: Implemented (for student request preview).
+    *   `ConsultationCard.tsx`: Implemented (displays basic info, status, triggers preview/link, **needs UI for category labels**).
+    *   `ConsultationsSection.tsx`: Implemented (handles list display, preview dialog state).
+    *   `ConsultationRequestForm.tsx`: Implemented.
+    *   `FileUpload.tsx`: Implemented.
+    *   `ConsultationPreviewDialog.tsx`: Implemented.
 *   **Chat:**
-    *   `ChatInterface.tsx`: Implemented (manages state, Pusher, renders children).
-    *   `MessageList.tsx`: Implemented (with AnimatePresence).
-    *   `ChatMessage.tsx`: Implemented (with motion, displays avatar).
+    *   `ChatInterface.tsx`: Implemented.
+    *   `MessageList.tsx`: Implemented.
+    *   `ChatMessage.tsx`: Implemented.
     *   `MessageInput.tsx`: Implemented (integrates AI Check button).
     *   `DocumentLink.tsx`: Implemented.
 *   **Profile:**
-    *   `PatientProfileForm.tsx`: Implemented (Client component for editing).
-    *   `StudentProfileForm.tsx`: Implemented (Client component for editing).
-    *   `ProfilePictureUpload.tsx`: Implemented (Client component, uses Vercel Blob).
+    *   `PatientProfileForm.tsx`, `StudentProfileForm.tsx`, `ProfilePictureUpload.tsx`: Implemented.
 *   **Feedback:**
-    *   (Feedback form is currently inline in `app/feedback/page.tsx` - Could be extracted to a component).
+    *   (Feedback form inline in `app/feedback/page.tsx`. **Needs Categorized Feedback UI components**).
 *   **AI:**
-    *   `JargonExplainer.tsx`: Implemented (Client component, calls AI action).
-    *   `AICheckResultDisplay.tsx`: Implemented (Client component for displaying AI check results).
+    *   `JargonExplainer.tsx`: Implemented.
+    *   `AICheckResultDisplay.tsx`: Implemented.
 
 ### `/components/admin` (Admin-Specific Components - Implemented)
-
-*   `AdminUserTable.tsx`: Implemented (displays users, includes Verify button).
-*   `AdminConsultationTable.tsx`: Implemented (displays consultations, links to detail view).
-*   `VerifyStudentButton.tsx`: Implemented (Client component, calls admin action).
+*   `AdminUserTable.tsx`, `AdminConsultationTable.tsx` (needs category/feedback columns), `VerifyStudentButton.tsx`.
 
 ## 3. State Management
-
-*   **Client-Side:** Primarily React Hooks (`useState`, `useRef`, `useEffect`, `useTransition`). React Hook Form used for forms. `useSession` from NextAuth.js. *(Confirmed)*
-*   **Global State:** Zustand planned but not significantly used yet. *(Status Unchanged)*
-*   **Server State:** Managed via Server Components fetching data directly (Dashboards, Profile Pages, Detail Pages) or through Server Actions (`actions/*`) and API Route Handlers (`/app/api/*`). Revalidation (`revalidatePath`) used. *(Confirmed)*
+*   Client-Side: Primarily React Hooks, React Hook Form, `useSession`. *(Confirmed)*
+*   Global State: Zustand available if needed. *(Status Unchanged)*
+*   Server State: Server Components, Server Actions, API Routes. *(Confirmed)*
 
 ## 4. Components Still Needed / To Refine
 
-*   **Animation Refinement:** Review/polish existing animations. Implement remaining planned animations (e.g., Landing Page WOW effect).
-*   **Error Display:** Standardize error display beyond toasts.
-*   **Feedback Form:** Extract feedback form logic into a reusable component.
-*   **Admin:** Statistic components, Profile View component.
-*   **Search:** Search input and results components.
+*   **AI:** Component to display AI category labels (e.g., small Badges on cards/details). UI for Document Summarizer (button/display).
+*   **Student Dashboard:** Filtering controls (dropdown/checkboxes) for AI categories.
+*   **Authentication:** Password visibility toggle component/logic. Components for Forgot/Reset Password forms (if extracting from pages).
+*   **Feedback:** UI components for submitting/displaying categorized feedback.
 *   **Deregistration:** Confirmation dialog/component.
-*   **Password Visibility:** Component/logic for input toggle.
-*   **Refinement:** Review all components for responsiveness, accessibility, consistency (e.g., card interactions), visual polish (color, backgrounds).
+*   **Admin:** Statistic display components (charts?), Profile View component.
+*   **Search:** Search input and results components.
+*   **General UI/UX:** Landing page animation, Logo size adjustment, Color/Background enhancements, Card interaction consistency implementation, Disclaimer placement adjustment.
+*   **Animation Refinement:** Review/polish existing animations.
+*   **Error Display:** Standardize further.
