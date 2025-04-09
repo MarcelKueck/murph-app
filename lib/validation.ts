@@ -43,7 +43,7 @@ export const RegisterSchema = z.object({
   return true;
 }, {
   message: "Universität und klinisches Studienjahr sind für Medizinstudenten erforderlich.",
-  path: ["university"],
+  path: ["university"], // Apply error message to university field for simplicity
 });
 export type RegisterFormData = z.infer<typeof RegisterSchema>;
 
@@ -68,7 +68,7 @@ export type UploadedDocument = {
     storageUrl: string;
     mimeType: string;
     fileSize?: number;
-    uploadId: string;
+    uploadId: string; // Temporary ID used during upload/form handling
 };
 
 // --- Profile Update Schemas ---
@@ -82,7 +82,7 @@ export const UpdatePatientProfileSchema = BaseProfileSchema.extend({
 export type UpdatePatientProfileFormData = z.infer<typeof UpdatePatientProfileSchema>;
 export const UpdateStudentProfileSchema = BaseProfileSchema.extend({
     university: z.string().trim().min(1, { message: "Universität ist erforderlich."}),
-    clinicalYear: z.coerce.number().int().positive().min(1).max(10),
+    clinicalYear: z.coerce.number({required_error: "Klinisches Jahr ist erforderlich."}).int().positive().min(1).max(10), // Use coerce
 });
 export type UpdateStudentProfileFormData = z.infer<typeof UpdateStudentProfileSchema>;
 
@@ -99,9 +99,17 @@ export const ResetPasswordSchema = z.object({
     path: ["confirmPassword"],
 });
 
-// --- Feedback Schema ---
+// --- Feedback Schema (UPDATED) ---
 export const SubmitFeedbackSchema = z.object({
     consultationId: z.string().cuid("Ungültige Beratungs-ID."),
-    rating: z.coerce.number().int().min(1, "Bewertung ist erforderlich.").max(5, "Bewertung muss zwischen 1 und 5 liegen."),
+    // Overall Rating (still required to trigger unlock)
+    rating: z.coerce.number({required_error: "Gesamtbewertung ist erforderlich."}).int().min(1, "Bewertung muss zwischen 1 und 5 liegen.").max(5, "Bewertung muss zwischen 1 und 5 liegen."),
+    // New Specific Ratings (also required)
+    clarityRating: z.coerce.number({required_error: "Bewertung der Klarheit ist erforderlich."}).int().min(1, "Bewertung muss zwischen 1 und 5 liegen.").max(5, "Bewertung muss zwischen 1 und 5 liegen."),
+    helpfulnessRating: z.coerce.number({required_error: "Bewertung der Hilfreichkeit ist erforderlich."}).int().min(1, "Bewertung muss zwischen 1 und 5 liegen.").max(5, "Bewertung muss zwischen 1 und 5 liegen."),
+    communicationRating: z.coerce.number({required_error: "Bewertung der Kommunikation ist erforderlich."}).int().min(1, "Bewertung muss zwischen 1 und 5 liegen.").max(5, "Bewertung muss zwischen 1 und 5 liegen."),
+    // Optional Text Feedback
     feedback: z.string().trim().max(1000, "Feedback darf maximal 1000 Zeichen lang sein.").optional(),
 });
+
+export type SubmitFeedbackFormData = z.infer<typeof SubmitFeedbackSchema>; // Export the type

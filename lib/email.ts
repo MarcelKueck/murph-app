@@ -1,6 +1,6 @@
 // lib/email.ts
 import { User, UserRole, Consultation } from '@prisma/client';
-import { Resend } from 'resend'; // <<< Import Resend
+import { Resend } from 'resend'; // Import Resend
 
 // --- Initialize Resend ---
 let resend: Resend | null = null;
@@ -40,6 +40,7 @@ interface FeedbackInfo {
     comment?: string | null;
 }
 
+
 // --- Email Templates ---
 export const templates = {
   welcome: (user: UserInfo) => ({
@@ -52,11 +53,18 @@ export const templates = {
     text: `Hallo ${user.firstName || 'Nutzer'},\n\nSie haben angefordert, Ihr Passwort zurückzusetzen. Bitte klicken Sie auf den folgenden Link, um ein neues Passwort festzulegen (dieser Link ist 1 Stunde gültig):\n${resetLink}\n\nWenn Sie dies nicht angefordert haben, können Sie diese E-Mail ignorieren.\n\nMit freundlichen Grüßen,\nIhr Murph Team`,
     html: `<p>Hallo ${user.firstName || 'Nutzer'},</p><p>Sie haben angefordert, Ihr Passwort zurückzusetzen. Bitte klicken Sie auf den folgenden Link, um ein neues Passwort festzulegen (dieser Link ist 1 Stunde gültig):</p><p><a href="${resetLink}">${resetLink}</a></p><p>Wenn Sie dies nicht angefordert haben, können Sie diese E-Mail ignorieren.</p><p>Mit freundlichen Grüßen,<br/>Ihr Murph Team</p>`,
   }),
+  // <<< MODIFIED consultationCompleted template >>>
   consultationCompleted: (patient: UserInfo, consultation: ConsultationInfo, feedbackLink: string) => ({
     subject: `Ihre Murph-Beratung "${consultation.topic}" wurde abgeschlossen`,
-    text: `Hallo ${patient.firstName || 'Nutzer'},\n\nIhre Beratung zum Thema "${consultation.topic}" wurde abgeschlossen. Sie können die Zusammenfassung und den Verlauf unter folgendem Link einsehen:\n${process.env.NEXT_PUBLIC_APP_BASE_URL}/patient/beratungen/${consultation.id}\n\nWir würden uns sehr über Ihr Feedback freuen:\n${feedbackLink}\n\nMit freundlichen Grüßen,\nIhr Murph Team`,
-    html: `<p>Hallo ${patient.firstName || 'Nutzer'},</p><p>Ihre Beratung zum Thema "${consultation.topic}" wurde abgeschlossen. Sie können die Zusammenfassung und den Verlauf <a href="${process.env.NEXT_PUBLIC_APP_BASE_URL}/patient/beratungen/${consultation.id}">hier einsehen</a>.</p><p>Wir würden uns sehr über <a href="${feedbackLink}">Ihr Feedback</a> freuen, um Murph weiter zu verbessern.</p><p>Mit freundlichen Grüßen,<br/>Ihr Murph Team</p>`,
+    text: `Hallo ${patient.firstName || 'Nutzer'},\n\nIhre Murph-Beratung zum Thema "${consultation.topic}" wurde vom Medizinstudenten abgeschlossen.\n\nUm die schriftliche Zusammenfassung der Erklärung einzusehen und als PDF herunterzuladen, bitten wir Sie um ein kurzes Feedback zu Ihrer Erfahrung. Ihr Feedback hilft uns und den Studierenden, Murph stetig zu verbessern.\n\nFeedback geben und Zusammenfassung freischalten:\n${feedbackLink}\n\nNachdem Sie Feedback gegeben haben, finden Sie die Zusammenfassung auf Ihrer Beratungsseite oder im Dashboard.\n\nMit freundlichen Grüßen,\nIhr Murph Team`,
+    html: `<p>Hallo ${patient.firstName || 'Nutzer'},</p>
+           <p>Ihre Murph-Beratung zum Thema "<strong>${consultation.topic}</strong>" wurde vom Medizinstudenten abgeschlossen.</p>
+           <p>Um die schriftliche Zusammenfassung der Erklärung einzusehen und als PDF herunterzuladen, bitten wir Sie um ein kurzes Feedback zu Ihrer Erfahrung. Ihr Feedback hilft uns und den Studierenden, Murph stetig zu verbessern.</p>
+           <p style="margin-top: 15px; margin-bottom: 15px;"><strong><a href="${feedbackLink}" style="color: #087f5b; text-decoration: underline; padding: 10px 15px; border: 1px solid #087f5b; border-radius: 5px; display: inline-block;">Feedback geben & Zusammenfassung freischalten</a></strong></p>
+           <p>Nachdem Sie Feedback gegeben haben, finden Sie die Zusammenfassung auf Ihrer <a href="${process.env.NEXT_PUBLIC_APP_BASE_URL}/patient/beratungen/${consultation.id}" style="color: #087f5b;">Beratungsseite</a> oder in Ihrem <a href="${process.env.NEXT_PUBLIC_APP_BASE_URL}/patient/dashboard" style="color: #087f5b;">Dashboard</a>.</p>
+           <p>Mit freundlichen Grüßen,<br/>Ihr Murph Team</p>`,
   }),
+  // <<< END MODIFICATION >>>
   newMessage: (recipient: UserInfo, sender: SenderInfo, consultation: ConsultationInfo) => {
       const dashboardPath = recipient.role === UserRole.PATIENT ? 'patient' : recipient.role === UserRole.STUDENT ? 'student' : '';
       const messageLink = `${process.env.NEXT_PUBLIC_APP_BASE_URL}/${dashboardPath}/beratungen/${consultation.id}`;
@@ -94,25 +102,21 @@ export const templates = {
 };
 
 
-// --- Updated Email Sending Function ---
+// --- Email Sending Function --- (using Resend)
 export async function sendEmail({ to, subject, text, html }: EmailOptions): Promise<{ success: boolean; error?: string }> {
-    // Check if Resend is configured and domain is likely verified
     if (!resend || !process.env.EMAIL_FROM) {
         const errorMsg = "Email sending is not configured (Resend API Key or EMAIL_FROM missing).";
         console.error("Email Error:", errorMsg);
-        // Fallback to console log for local dev if needed? Or just error out.
         console.log('\n--- EMAIL SIMULATION (Fallback due to missing config) ---');
-        console.log(`From: ${process.env.EMAIL_FROM || 'MISSING_EMAIL_FROM'}`);
         console.log(`To: ${to}`);
         console.log(`Subject: ${subject}`);
         console.log('---------------------------------\n');
-        // Return failure so the caller knows the email wasn't actually sent
         return { success: false, error: errorMsg };
     }
 
-    const emailFrom = process.env.EMAIL_FROM; // e.g., "Murph App <noreply@murph-med.de>"
+    const emailFrom = process.env.EMAIL_FROM;
 
-    if (!to || !subject || !html) { // HTML is usually required by Resend
+    if (!to || !subject || !html) {
         console.error('Email Error: Missing required fields (to, subject, html).');
         return { success: false, error: 'Missing required email fields.' };
     }
@@ -121,19 +125,14 @@ export async function sendEmail({ to, subject, text, html }: EmailOptions): Prom
         console.log(`Attempting to send email via Resend to: ${to} | Subject: ${subject}`);
         const { data, error } = await resend.emails.send({
             from: emailFrom,
-            to: [to], // Resend expects 'to' to be an array
+            to: [to],
             subject: subject,
             html: html,
-            text: text, // Include text version as fallback
-            // Optional: Add tags for tracking in Resend dashboard
-            // tags: [
-            //     { name: 'category', value: 'user_notifications' }, // Example tag
-            // ],
+            text: text,
         });
 
         if (error) {
             console.error('Resend API Error:', error);
-            // Attempt to extract a more specific message if available
             const errorMessage = (error as any)?.message || 'Failed to send email via Resend.';
             return { success: false, error: errorMessage };
         }
