@@ -4,21 +4,12 @@
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LayoutGrid, LogOut, User as UserIcon } from "lucide-react";
+import { LayoutGrid } from "lucide-react"; // Removed LogOut, UserIcon as they are in UserMenuButton
 import { Skeleton } from "@/components/ui/skeleton";
 import Logo from './Logo'; // Import the updated Logo component
 import { UserRole } from '@prisma/client';
-import { getInitials } from '@/lib/utils'; // Import getInitials
 import UserMenuButton from './UserMenuButton'; // Import UserMenuButton
+import { cn } from '@/lib/utils'; // Import cn
 
 export default function Header() {
   const { data: session, status } = useSession();
@@ -40,10 +31,19 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
+        {/* Updated Link structure */}
         <Link href="/" className="flex items-center space-x-2" aria-label="Murph Startseite">
-          {/* Use the Logo component */}
-          <Logo />
-          {/* Text removed as it's in the SVG now */}
+            {/* Container for the SVG logo to control its size */}
+            <div className="h-7 w-7 text-brand-primary"> {/* Adjust h/w & color here */}
+                <Logo />
+            </div>
+            {/* Add the Murph text */}
+            <span className={cn(
+                "font-semibold text-xl", // Use site font (default), make bold, set size
+                "text-foreground" // Use standard text color
+             )}>
+                Murph
+            </span>
         </Link>
 
         <div className="flex items-center space-x-2 md:space-x-4">
