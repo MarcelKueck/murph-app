@@ -7,18 +7,31 @@ import ChatInterface from '@/components/features/ChatInterface';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, User, Users, FileText, Info, Star, MessageSquareQuote, Mail } from 'lucide-react'; // Added Mail
-import { ConsultationStatus, UserRole } from '@prisma/client';
+import { ArrowLeft, User, Users, FileText, Info, Star, MessageSquareQuote, Mail, Brain, Handshake, Smile } from 'lucide-react'; // Added icons
+import { ConsultationStatus, UserRole, Message, Document as DbDocument, PatientProfile, StudentProfile } from '@prisma/client'; // Explicit types
 import { cn } from '@/lib/utils';
 import { CONSULTATION_STATUS_LABELS, CONSULTATION_STATUS_COLORS } from '@/lib/constants';
 import DocumentLink from '@/components/features/DocumentLink';
-import { Separator } from '@/components/ui/separator'; // Import Separator
+import { Separator } from '@/components/ui/separator';
 
-// Helper to display stars
-const RatingDisplay = ({ rating }: { rating: number | null | undefined }) => {
-    if (rating === null || rating === undefined) return <span className="text-sm text-muted-foreground italic">Keine Bewertung</span>;
+// --- Define detailed type for fetched data ---
+type ConsultationDetailsAdmin = NonNullable<Awaited<ReturnType<typeof getConsultationDataForAdmin>>>
+
+// Helper to display stars with Label
+const RatingDisplay = ({ rating, label, icon: Icon }: { rating: number | null | undefined, label: string, icon?: React.ElementType }) => {
+    if (rating === null || rating === undefined) {
+         return (
+             <div className="flex items-center gap-2">
+                 {Icon && <Icon className="w-4 h-4 text-muted-foreground" />}
+                 <span className="text-sm font-medium">{label}:</span>
+                 <span className="text-sm text-muted-foreground italic">N/A</span>
+             </div>
+         );
+     }
     return (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+            {Icon && <Icon className="w-4 h-4 text-muted-foreground" />}
+            <span className="text-sm font-medium">{label}:</span>
             {[...Array(5)].map((_, i) => (
                 <Star
                     key={i}
@@ -28,7 +41,7 @@ const RatingDisplay = ({ rating }: { rating: number | null | undefined }) => {
                     )}
                 />
             ))}
-            <span className="text-sm font-medium ml-1">({rating}/5)</span>
+            <span className="text-sm font-medium">({rating}/5)</span>
         </div>
     );
 };
@@ -38,58 +51,56 @@ async function getConsultationDataForAdmin(consultationId: string) {
   try {
       const consultation = await prisma.consultation.findUnique({
         where: { id: consultationId },
-        include: {
-          messages: {
-              orderBy: { createdAt: 'asc' },
-              include: {
-                  sender: { // Include sender details for messages
-                      select: {
-                          id: true,
-                          role: true,
-                          image: true,
-                          patientProfile: { select: { firstName: true, lastName: true } },
-                          studentProfile: { select: { firstName: true, lastName: true } },
-                      }
-                  }
-              }
-          },
-          documents: { orderBy: { createdAt: 'asc' } },
-          // --- Corrected Patient Selection ---
-          patient: {
-              select: { // Select specific fields from the User model for patient
-                  id: true,
-                  email: true,
-                  role: true,
-                  patientProfile: { // Select the related profile
-                      select: { // Select fields within the profile
-                          firstName: true,
-                          lastName: true,
-                      },
-                  },
-              },
-          },
-          // --- Corrected Student Selection ---
-          student: { // Student can be null, so use select here too
-              select: { // Select specific fields from the User model for student
-                  id: true,
-                  email: true,
-                  role: true,
-                  studentProfile: { // Select the related profile
-                      select: { // Select fields within the profile
-                          firstName: true,
-                          lastName: true,
-                          university: true,
-                      },
-                  },
-              },
-          }
+        // Select specific fields and include nested relations correctly
+        select: {
+            id: true,
+            topic: true,
+            status: true,
+            patientQuestion: true,
+            summary: true,
+            categories: true,
+            createdAt: true,
+            updatedAt: true,
+            patientId: true,
+            studentId: true,
+            // Feedback ratings
+            patientRating: true,
+            clarityRating: true,
+            helpfulnessRating: true,
+            communicationRating: true,
+            patientFeedback: true,
+            // Include related data with nested selections
+            messages: {
+                orderBy: { createdAt: 'asc' },
+                include: {
+                    sender: {
+                        select: {
+                            id: true,
+                            role: true,
+                            image: true,
+                            patientProfile: { select: { firstName: true, lastName: true } },
+                            studentProfile: { select: { firstName: true, lastName: true } },
+                        }
+                    }
+                }
+            },
+            documents: { orderBy: { createdAt: 'asc' } },
+            patient: {
+                select: {
+                    id: true, email: true, role: true,
+                    patientProfile: { select: { firstName: true, lastName: true } },
+                },
+            },
+            student: {
+                select: {
+                    id: true, email: true, role: true,
+                    studentProfile: { select: { firstName: true, lastName: true, university: true } },
+                },
+            }
         }
       });
-      // Add explicit null check before returning? Prisma findUnique returns null if not found.
-      // The notFound() call later handles the null case.
       return consultation;
   } catch (error) {
-      // Log the specific error
       console.error(`Error fetching admin consultation data for ID ${consultationId}:`, error);
       return null; // Return null on error
   }
@@ -97,14 +108,17 @@ async function getConsultationDataForAdmin(consultationId: string) {
 
 
 // The main Server Component for the admin detail page
-// --- CORRECTED: await params ---
 export default async function AdminConsultationDetailPage({ params }: { params: { consultationId: string } }) {
-  // <<< Await params before accessing its properties >>>
+  // Await params before accessing its properties
   const awaitedParams = await params;
   const { consultationId } = awaitedParams;
-  // --- End Correction ---
 
-  const session = await auth(); // Required for layout check, might be useful here later
+  // Layout already performs role check, but we can keep session check if needed
+  const session = await auth();
+  if (!session?.user?.id || session.user.role !== UserRole.ADMIN) {
+      // This shouldn't be reachable if layout works, but as a fallback
+      redirect('/login');
+  }
 
   const consultation = await getConsultationDataForAdmin(consultationId);
 
@@ -114,7 +128,6 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
 
   // Data Preparation for ChatInterface
   const initialMessages = consultation.messages.map(msg => {
-     // Sender can be null if relation wasn't loaded correctly (shouldn't happen with corrected query)
      if (!msg.sender) {
           console.warn(`Message ${msg.id} is missing sender data.`);
           return { id: msg.id, content: msg.content, createdAt: msg.createdAt.toISOString(), sender: { id: 'unknown', role: UserRole.PATIENT, firstName: 'Unbekannt', lastName: '', image: null } };
@@ -134,6 +147,7 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
      };
   });
 
+  // Map documents safely
   const initialDocuments = consultation.documents.map(doc => ({
       id: doc.id,
       fileName: doc.fileName,
@@ -142,7 +156,7 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
       fileSize: doc.fileSize,
   }));
 
-  // Safely access nested properties after fixing the Prisma query
+  // Safely access nested properties
   const patientName = consultation.patient?.patientProfile ? `${consultation.patient.patientProfile.firstName} ${consultation.patient.patientProfile.lastName}` : consultation.patient?.email ?? 'Patient nicht gefunden';
   const patientEmail = consultation.patient?.email ?? '-';
   const studentName = consultation.student?.studentProfile ? `${consultation.student.studentProfile.firstName} ${consultation.student.studentProfile.lastName}` : 'Nicht zugewiesen';
@@ -195,19 +209,24 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
                  )}
                  {/* Display Patient Feedback */}
                   {consultation.status === ConsultationStatus.COMPLETED && (
-                    <div className="pt-4 border-t">
-                        <h4 className="font-medium mb-2 text-sm">Patientenfeedback</h4>
-                        <div className="flex items-center mb-2">
-                            <span className="text-sm mr-2">Bewertung:</span>
-                            <RatingDisplay rating={consultation.patientRating} />
+                    <div className="pt-4 border-t space-y-3">
+                        <h4 className="font-medium text-base">Patientenfeedback</h4>
+                        {/* Display detailed ratings */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                            <RatingDisplay rating={consultation.patientRating} label="Gesamt" icon={Star} />
+                            <RatingDisplay rating={consultation.clarityRating} label="Klarheit" icon={Brain} />
+                            <RatingDisplay rating={consultation.helpfulnessRating} label="Hilfreichkeit" icon={Handshake} />
+                            <RatingDisplay rating={consultation.communicationRating} label="Kommunikation" icon={Smile} />
                         </div>
+
+                        {/* Display comment */}
                         {consultation.patientFeedback ? (
-                             <div>
-                                 <span className="text-sm mr-2">Kommentar:</span>
+                             <div className='pt-2'>
+                                 <span className="text-sm font-medium">Kommentar:</span>
                                  <p className="text-sm text-muted-foreground p-3 border rounded bg-muted/50 whitespace-pre-wrap mt-1">{consultation.patientFeedback}</p>
                              </div>
                         ) : (
-                            <p className="text-sm text-muted-foreground italic">Kein schriftliches Feedback abgegeben.</p>
+                            <p className="text-sm text-muted-foreground italic pt-2">Kein schriftlicher Kommentar abgegeben.</p>
                         )}
                     </div>
                  )}
@@ -222,11 +241,10 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
             <CardContent className="flex-grow p-0 md:p-6 md:pt-0">
                     <ChatInterface
                         consultationId={consultation.id}
-                        // Pass a non-participant ID to ensure read-only if ChatInterface uses it
                         currentUserId={"ADMIN_VIEWER"} // Use a distinct ID for admin view
                         initialMessages={initialMessages}
-                        initialDocuments={[]} // Documents shown above
-                        consultationStatus={consultation.status} // Status still important for UI state
+                        initialDocuments={initialDocuments} // Documents are displayed above, pass empty array here
+                        consultationStatus={consultation.status}
                     />
             </CardContent>
         </Card>

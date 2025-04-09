@@ -4,41 +4,79 @@ import prisma from '@/lib/prisma';
 import { ConsultationStatus, Consultation, PatientProfile, StudentProfile, User } from '@prisma/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import AdminConsultationTable from '@/components/admin/AdminConsultationTable'; // Create this next
+import AdminConsultationTable from '@/components/admin/AdminConsultationTable'; // Correct path for component
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 // Type for consultation view in admin
 export type AdminConsultationView = Consultation & {
     patient: User & { patientProfile: PatientProfile | null };
-    student: (User & { studentProfile: StudentProfile | null }) | null; // Student can be null
+    student: (User & { studentProfile: StudentProfile | null }) | null;
+    // Explicitly add ratings for type safety during selection
+   patientRating?: number | null;
+   clarityRating?: number | null;
+   helpfulnessRating?: number | null;
+   communicationRating?: number | null;
 };
 
 async function getConsultationsForAdmin(filter?: string): Promise<AdminConsultationView[]> {
      let whereCondition: any = {};
-      // Example filter
+     // Filter logic remains the same...
      if (filter === 'active') {
-         whereCondition = {
-             status: {
-                 in: [ConsultationStatus.REQUESTED, ConsultationStatus.IN_PROGRESS]
-             }
-         };
+         whereCondition = { status: { in: [ConsultationStatus.REQUESTED, ConsultationStatus.IN_PROGRESS] } };
      } else if (Object.values(ConsultationStatus).includes(filter as ConsultationStatus)) {
          whereCondition = { status: filter as ConsultationStatus };
      }
 
-
-    const consultations = await prisma.consultation.findMany({
+     console.log("[Admin Consultations] Fetching consultations with filter:", filter || "None");
+     const consultations = await prisma.consultation.findMany({
          where: whereCondition,
-        include: {
-            patient: { include: { patientProfile: true } },
-            student: { include: { studentProfile: true } },
-        },
-        orderBy: {
-            createdAt: 'desc',
-        }
-    });
-    return consultations as AdminConsultationView[];
+         // Use explicit SELECT to guarantee fields
+         select: {
+            // Include all original Consultation fields needed by the table/card
+            id: true,
+            patientId: true,
+            studentId: true,
+            status: true,
+            topic: true,
+            patientQuestion: false, // Not needed for table
+            summary: false, // Not needed for table
+            categories: true, // Keep if needed later
+            createdAt: true,
+            updatedAt: true,
+            // Explicitly select ALL rating fields
+            patientRating: true,
+            clarityRating: true,
+            helpfulnessRating: true,
+            communicationRating: true,
+            patientFeedback: false, // Not needed for table
+            // Include related data needed
+            patient: { include: { patientProfile: true } }, // Keep full include here ok
+            student: { include: { studentProfile: true } }, // Keep full include here ok
+         },
+         orderBy: {
+             createdAt: 'desc',
+         }
+     });
+
+    // Add console log to check fetched data
+    if (consultations.length > 0) {
+        console.log("[Admin Consultations] Sample fetched data[0]:", {
+            id: consultations[0].id,
+            topic: consultations[0].topic,
+            status: consultations[0].status,
+            patientRating: consultations[0].patientRating,
+            clarityRating: consultations[0].clarityRating,
+            helpfulnessRating: consultations[0].helpfulnessRating,
+            communicationRating: consultations[0].communicationRating,
+            patientName: consultations[0].patient?.patientProfile?.firstName,
+            studentName: consultations[0].student?.studentProfile?.firstName,
+        });
+    } else {
+        console.log("[Admin Consultations] No consultations found for current filter.");
+    }
+
+     return consultations as AdminConsultationView[];
 }
 
 // Loading Skeleton
@@ -53,9 +91,13 @@ const TableSkeleton = () => (
 );
 
 export default async function AdminConsultationsPage({ searchParams }: { searchParams?: { [key: string]: string | string[] | undefined } }) {
-    const filter = searchParams?.filter as string | undefined;
-    const consultations = await getConsultationsForAdmin(filter);
+   // Await searchParams
+   const awaitedSearchParams = await searchParams;
+   const filter = awaitedSearchParams?.filter as string | undefined;
+    console.log("[Admin Consultations Page] Rendering with filter:", filter || "None");
 
+    // Await the data fetching
+    const consultations = await getConsultationsForAdmin(filter);
     const getFilterDescription = () => {
         switch(filter) {
             case 'active': return 'Filter: Aktive (Angefragt & Laufend).';
@@ -64,7 +106,7 @@ export default async function AdminConsultationsPage({ searchParams }: { searchP
             case ConsultationStatus.COMPLETED: return 'Filter: Nur Abgeschlossen.';
             default: return 'Alle Beratungen im System.';
         }
-    }
+    };
 
     return (
         <Card>
@@ -76,7 +118,7 @@ export default async function AdminConsultationsPage({ searchParams }: { searchP
                             {getFilterDescription()}
                         </CardDescription>
                     </div>
-                    {/* Simple Filter Links */}
+                    {/* Filter Links */}
                     <div className="flex gap-2 flex-wrap">
                         <Button size="sm" variant={!filter ? "secondary" : "outline"} asChild>
                             <Link href="/admin/consultations">Alle</Link>
