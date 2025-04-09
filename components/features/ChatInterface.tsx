@@ -28,7 +28,6 @@ interface ChatInterfaceProps {
   initialMessages: InitialMessage[];
   initialDocuments: InitialDocument[];
   consultationStatus: ConsultationStatus;
-  // REMOVED: patientQuestion?: string; // Removed as Explanation Draft feature is removed
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -37,28 +36,53 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   initialMessages,
   initialDocuments,
   consultationStatus,
-  // REMOVED: patientQuestion
 }) => {
   const [messages, setMessages] = useState<MessageData[]>(initialMessages);
   const [documents, setDocuments] = useState<InitialDocument[]>(initialDocuments);
   const [isConnected, setIsConnected] = useState(true);
 
-  // Callback for incoming Pusher messages
+  // --- Pusher Event Handlers ---
   const handleIncomingMessage = useCallback((newMessage: MessageData) => {
+    // Ignore self-messages received via Pusher (optimistic update handles this)
     if (newMessage.sender.id === currentUserId) {
-        return; // Ignore self-messages from Pusher
+       console.log("Pusher: Ignoring self-sent new message.");
+       return;
     }
     setMessages((currentMessages) => {
+      // Add message only if it doesn't already exist
       if (!currentMessages.some(msg => msg.id === newMessage.id)) {
+        console.log("Pusher: Adding new message", newMessage.id);
         return [...currentMessages, newMessage];
       }
+      console.log("Pusher: Duplicate new message ignored", newMessage.id);
       return currentMessages;
     });
   }, [currentUserId]);
 
-  // Setup Pusher subscription hook
+ const handleMessageUpdated = useCallback((updatedData: { id: string; content: string }) => {
+     console.log("Pusher: Handling message-updated", updatedData.id);
+     setMessages((currentMessages) =>
+       currentMessages.map((msg) =>
+         msg.id === updatedData.id ? { ...msg, content: updatedData.content } : msg
+       )
+     );
+ }, []); // Empty dependency array as it doesn't depend on external state
+
+ const handleMessageDeleted = useCallback((deletedData: { id: string }) => {
+      console.log("Pusher: Handling message-deleted", deletedData.id);
+     setMessages((currentMessages) =>
+       currentMessages.filter((msg) => msg.id !== deletedData.id)
+     );
+ }, []); // Empty dependency array
+  // --- End Pusher Handlers ---
+
+
+  // Setup Pusher subscriptions
   const channelName = `private-consultation-${consultationId}`;
   usePusherSubscription(channelName, 'new-message', handleIncomingMessage);
+  usePusherSubscription(channelName, 'message-updated', handleMessageUpdated);
+  usePusherSubscription(channelName, 'message-deleted', handleMessageDeleted);
+
 
   // Monitor Pusher connection state effect
   useEffect(() => {
@@ -73,12 +97,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, []);
 
-  // Callback for optimistic UI update when message is sent
+  // Callback for optimistic UI update when *sending* a message
   const handleMessageSent = (newMessage: MessageData) => {
     setMessages((currentMessages) => {
+        // Ensure no duplicate addition if Pusher is fast
        if (!currentMessages.some(msg => msg.id === newMessage.id)) {
+           console.log("Optimistic: Adding sent message", newMessage.id);
            return [...currentMessages, newMessage];
        }
+        console.log("Optimistic: Duplicate sent message ignored", newMessage.id);
        return currentMessages;
     });
   };
@@ -117,9 +144,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             // Render MessageInput only when chat is active
             <MessageInput
                 consultationId={consultationId}
-                onMessageSent={handleMessageSent}
+                onMessageSent={handleMessageSent} // Optimistic update for *sending*
                 disabled={isChatDisabled || !isConnected}
-                // REMOVED: patientQuestion prop removed
             />
          )}
     </div>

@@ -165,11 +165,11 @@ export default function ConsultationSummaryForm({
                      <div className="flex gap-2 w-full sm:w-auto">
                          <Button type="button" variant="outline" size="sm" onClick={handleDraftSummary} disabled={isBusy} title={"KI-Entwurf erstellen"}>
                              {isDrafting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                            Entwurf (KI)
+                            Entwurf
                         </Button>
                         <Button type="button" variant="outline" size="sm" onClick={handleCheckContent} disabled={isBusy || !form.watch('summary')} title="Text prüfen">
                             {isChecking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCheck className="mr-2 h-4 w-4" />}
-                            Prüfen (KI)
+                            Prüfen
                         </Button>
                     </div>
 
