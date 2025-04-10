@@ -6,10 +6,11 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") // Needed for migrations
+  directUrl = env("DIRECT_URL") // Make sure this is set in your .env for migrations
 }
 
 // --- Enums ---
+
 enum UserRole {
   PATIENT
   STUDENT
@@ -18,32 +19,37 @@ enum UserRole {
 
 enum ConsultationStatus {
   REQUESTED
-  ASSIGNED // Potentially used internally or for future features
+  ASSIGNED
   IN_PROGRESS
   COMPLETED
-  CANCELLED // Can be used if a consultation is explicitly cancelled
+  CANCELLED
 }
 
+
 // --- Models ---
+
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
-  passwordHash  String?   // Nullable if using OAuth providers without password
-  image         String?   // URL for profile picture
+  passwordHash  String?
+  image         String?
   role          UserRole  @default(PATIENT)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Profiles
+  patientProfile PatientProfile?
+  studentProfile StudentProfile?
+
   // Relations
-  patientProfile         PatientProfile?
-  studentProfile         StudentProfile?
-  sentMessages           Message[]          @relation("SenderMessages")
-  consultationsAsPatient Consultation[]     @relation("PatientConsultations")
-  consultationsAsStudent Consultation[]     @relation("StudentConsultations")
-  uploadedDocuments      Document[]         @relation("UploaderDocuments")
-  passwordResetTokens    PasswordResetToken[]
-  accounts               Account[]          // For NextAuth OAuth
-  sessions               Session[]          // For NextAuth database sessions (if used)
+  sentMessages         Message[]            @relation("SenderMessages")
+  consultationsAsPatient Consultation[]       @relation("PatientConsultations")
+  consultationsAsStudent Consultation[]       @relation("StudentConsultations")
+  uploadedDocuments    Document[]           @relation("UploaderDocuments")
+  passwordResetTokens  PasswordResetToken[]
+  accounts             Account[]
+  sessions             Session[]
+  deletionFeedbacks    DeletionFeedback[] // Relation to feedback (optional)
 }
 
 model Account {
@@ -71,7 +77,8 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -79,54 +86,55 @@ model Session {
 model PatientProfile {
   id        String   @id @default(cuid())
   userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   firstName String
   lastName  String
-  dob       DateTime? // Date of Birth
+  dob       DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model StudentProfile {
   id            String   @id @default(cuid())
   userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   firstName     String
   lastName      String
   university    String
-  clinicalYear  Int      // e.g., 3 for 3rd clinical year
+  clinicalYear  Int
   isVerified    Boolean  @default(false)
-  averageRating Float?   // Optional: Could be calculated later
+  averageRating Float?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Consultation {
   id              String    @id @default(cuid())
   patientId       String
-  patient         User      @relation("PatientConsultations", fields: [patientId], references: [id], onDelete: Cascade)
   studentId       String?
-  student         User?     @relation("StudentConsultations", fields: [studentId], references: [id], onDelete: SetNull) // SetNull on student deletion
   status          ConsultationStatus @default(REQUESTED)
   topic           String
   patientQuestion String    @db.Text
-  summary         String?   @db.Text // Summary written by the student
-  categories      String[]  @default([]) // AI assigned categories
+  summary         String?   @db.Text
+  categories      String[]  @default([])
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  // Relations
-  messages  Message[]
-  documents Document[]
-
-  // --- Feedback Fields ---
-  patientRating       Int?     // Overall satisfaction (1-5), presence indicates feedback given & unlocks summary
+  // Feedback Fields
+  patientRating       Int?     // Overall satisfaction (1-5), presence indicates feedback given
   patientFeedback     String?  @db.Text // Optional free text comment
   clarityRating       Int?     // Clarity of explanation (1-5)
   helpfulnessRating   Int?     // Helpfulness in addressing question (1-5)
   communicationRating Int?     // Student's communication style (1-5)
 
-  // Indexes for common queries
+  // Relations
+  patient   User      @relation("PatientConsultations", fields: [patientId], references: [id], onDelete: Cascade)
+  student   User?     @relation("StudentConsultations", fields: [studentId], references: [id], onDelete: SetNull) // Keep student consultations if student deletes account
+  messages  Message[]
+  documents Document[] @relation("ConsultationDocuments") // Relation for all docs in consultation
+
   @@index([patientId])
   @@index([studentId])
   @@index([status])
@@ -134,52 +142,68 @@ model Consultation {
 }
 
 model Message {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   consultationId String
-  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   senderId       String
-  sender         User     @relation("SenderMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  content        String   @db.Text
-  createdAt      DateTime @default(now())
+  content        String    @db.Text
+  createdAt      DateTime  @default(now())
+  isRead         Boolean   @default(false) // For unread indicator feature
 
-  @@index([consultationId, createdAt]) // Index for ordering messages within a consultation
+  // Relations
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  sender         User         @relation("SenderMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  // Relation to documents sent WITH this message
+  attachedDocuments Document[] @relation("MessageDocuments")
+
+  @@index([consultationId, createdAt])
   @@index([senderId])
 }
 
 model Document {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   consultationId String
-  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   uploaderId     String
-  uploader       User     @relation("UploaderDocuments", fields: [uploaderId], references: [id], onDelete: Cascade)
   fileName       String
-  storageUrl     String   @db.Text // URL from Vercel Blob
-  mimeType       String   // e.g., 'application/pdf', 'image/jpeg'
-  fileSize       Int?     // Size in bytes
-  createdAt      DateTime @default(now())
+  storageUrl     String    @db.Text // URL from Vercel Blob
+  mimeType       String
+  fileSize       Int?
+  createdAt      DateTime  @default(now())
+  // Optional link back to the specific message it was attached to
+  messageId      String?
+
+  // Relations
+  consultation Consultation @relation("ConsultationDocuments", fields: [consultationId], references: [id], onDelete: Cascade)
+  uploader     User         @relation("UploaderDocuments", fields: [uploaderId], references: [id], onDelete: Cascade)
+  message      Message?     @relation("MessageDocuments", fields: [messageId], references: [id], onDelete: SetNull) // If message deleted, keep doc but unlink
 
   @@index([consultationId])
   @@index([uploaderId])
+  @@index([messageId]) // Index for message link
 }
 
 model PasswordResetToken {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String   @unique // Store a hash of the token
-  expiresAt DateTime // When the token expires
+  expiresAt DateTime
   createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model DeletionFeedback {
   id        String   @id @default(cuid())
-  userId    String?  // User ID *before* deletion, allows tracing if needed
+  userId    String?  // User ID *before* deletion, good for tracking
   userEmail String   // Store email as user record will be gone
   feedback  String?  @db.Text // The optional feedback text
-  deletedAt DateTime @default(now()) // Timestamp when feedback was recorded/deletion occurred
+  deletedAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull) // SetNull if user deleted
 
   @@index([userEmail])
   @@index([deletedAt])
+  @@index([userId])
 }

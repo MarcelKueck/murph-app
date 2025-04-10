@@ -1,93 +1,167 @@
 // app/api/upload/route.ts
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth'; // Use server-side auth helper
+import { auth } from '@/lib/auth';
+import prisma from '@/lib/prisma'; // <<< Import prisma
+import { triggerPusherEvent } from '@/lib/pusher/server'; // <<< Import Pusher helper
+import { UserRole, ConsultationStatus } from '@prisma/client'; // <<< Import UserRole and ConsultationStatus
 
-// IMPORTANT: Edge runtime is often recommended for Blob uploads for performance,
-// BUT our current auth setup (using PrismaAdapter with JWT strategy) might have
-// issues accessing the full session reliably on the Edge.
-// Let's START with the Node.js runtime for stability with our auth setup.
-// If performance becomes an issue, we might need to explore alternatives
-// like passing JWT tokens manually or using a different auth strategy for this route.
-// export const runtime = 'edge'; // DO NOT use Edge for now with current auth setup
+// Define allowed types for chat uploads
+const ALLOWED_CHAT_UPLOAD_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_FILE_SIZE_MB = 10;
 
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
 
   try {
-    const session = await auth(); // Verify user session
-
-    // --- Authorization Check ---
-    // Ensure user is logged in (basic check)
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Nicht autorisiert. Bitte anmelden.' },
-        { status: 401 }
-      );
-    }
-     // Ensure user is a Patient (only patients should upload during request)
-     if (session.user.role !== 'PATIENT') {
-          return NextResponse.json(
-            { error: 'Nur Patienten dürfen Dateien für Anfragen hochladen.' },
-            { status: 403 } // Forbidden
-          );
-     }
-     const userId = session.user.id;
-     // --- ---
-
-    // Handle the upload using Vercel Blob's server helper
     const jsonResponse = await handleUpload({
       body,
       request,
-      // Important: Restrict where files can be uploaded using onBeforeGenerateToken
-      onBeforeGenerateToken: async (pathname /*, clientPayload */) => {
-        // Generate a unique pathname for the blob file based on user ID and filename
-        // Example: 'user_xyz/requests/timestamp-filename.pdf'
-        // This helps ensure users can't overwrite each other's files easily.
-        // Using a timestamp or random prefix also prevents overwriting own files.
+      // --- MODIFIED: Authorization and Metadata Handling ---
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        const session = await auth();
+        if (!session?.user?.id) {
+            throw new Error('Nicht autorisiert: Kein Benutzer angemeldet.');
+        }
+        const userId = session.user.id;
+        const userRole = session.user.role;
+
+        // Parse consultationId from payload
+        let consultationId: string | null = null;
+        if (clientPayload) {
+             try {
+                 const payload = JSON.parse(clientPayload);
+                 consultationId = payload.consultationId;
+             } catch (e) {
+                 console.error("Failed to parse clientPayload:", clientPayload, e);
+                 throw new Error('Ungültige Anfrage-Daten.');
+             }
+         }
+         if (!consultationId || typeof consultationId !== 'string') {
+             throw new Error('Beratungs-ID fehlt oder ist ungültig.');
+         }
+
+         // --- Authorization Check: Verify user participation in consultation ---
+         const consultation = await prisma.consultation.findFirst({
+             where: {
+                 id: consultationId,
+                 OR: [
+                     { patientId: userId }, // Allow patient
+                     { studentId: userId }, // Allow assigned student
+                 ],
+                 // Optional: Restrict uploads only to IN_PROGRESS?
+                 // status: ConsultationStatus.IN_PROGRESS,
+             },
+             select: { id: true, status: true } // Select minimal fields
+         });
+
+         if (!consultation) {
+              console.warn(`Upload Denied: User ${userId} not part of consultation ${consultationId} or consultation not found.`);
+              throw new Error('Zugriff auf diese Beratung verweigert.');
+         }
+         // --- End Authorization Check ---
+
+
+        // Generate a unique pathname within the consultation context
         const uniquePrefix = Date.now();
-        const blobPathname = `user_${userId}/requests/${uniquePrefix}-${pathname}`;
+        // Example path: 'consultations/consultation_abc/user_xyz/timestamp-filename.pdf'
+        const blobPathname = `consultations/${consultationId}/user_${userId}/${uniquePrefix}-${pathname}`;
 
-        console.log(`[Blob Upload] Authorizing path: ${blobPathname} for user: ${userId}`);
-
-        // Add additional checks here if needed based on clientPayload or pathname structure
+        console.log(`[Chat Blob Upload] Authorizing path: ${blobPathname} for user: ${userId}, consultation: ${consultationId}`);
 
         return {
-          allowedContentTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif'],
+          allowedContentTypes: ALLOWED_CHAT_UPLOAD_TYPES,
+          maximumSizeInBytes: MAX_FILE_SIZE_MB * 1024 * 1024,
           tokenPayload: JSON.stringify({
-            // Optional: Embed metadata in the token if needed later in onUploadCompleted
             userId: userId,
-            originalPathname: pathname,
+            consultationId: consultationId, // Pass consultationId to onUploadCompleted
+            originalFilename: pathname, // Keep original name if needed
           }),
-          // Generate the final pathname server-side for security
-          pathname: blobPathname,
+          pathname: blobPathname, // Use the server-generated path
+          addRandomSuffix: false, // We added a timestamp prefix
         };
       },
+      // --- MODIFIED: Save to DB and Trigger Pusher ---
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        // Optional: Server-side actions after successful upload
-        // e.g., logging, potentially creating a temporary DB record (though we link it later)
-        console.log('[Blob Upload] Blob upload completed:', blob.pathname, blob.url);
+        console.log('[Chat Blob Upload] Completed:', blob.pathname);
+        let payload;
         try {
-            const payload = JSON.parse(tokenPayload || '{}');
-            // console.log('[Blob Upload] Payload:', payload);
-             // Example: Log successful upload linked to user
-             // await prisma.activityLog.create({ data: { userId: payload.userId, action: 'FILE_UPLOADED', details: blob.url } });
+            payload = JSON.parse(tokenPayload || '{}');
         } catch (e) {
-            console.error("[Blob Upload] Error processing token payload on completion:", e);
+            console.error("[Chat Blob Upload] Error parsing tokenPayload on completion:", e);
+            return; // Stop processing if payload is invalid
+        }
+
+        const { userId, consultationId, originalFilename } = payload;
+
+        if (!userId || !consultationId || !originalFilename) {
+            console.error("[Chat Blob Upload] Missing data in tokenPayload:", payload);
+            return;
+        }
+
+        try {
+            // --- Save Document record to Database ---
+             console.log(`[Chat Blob Upload] Saving document record for consultation ${consultationId}`);
+             const newDocument = await prisma.document.create({
+                 data: {
+                     consultationId: consultationId,
+                     uploaderId: userId,
+                     fileName: originalFilename, // Use original filename for display
+                     storageUrl: blob.url,
+                     mimeType: blob.contentType,
+                     fileSize: blob.size,
+                 },
+                 // Select data needed for Pusher payload
+                 select: {
+                     id: true,
+                     fileName: true,
+                     storageUrl: true,
+                     mimeType: true,
+                     fileSize: true,
+                     createdAt: true, // Optional, maybe useful
+                     uploaderId: true, // Useful to know who uploaded
+                 }
+             });
+             console.log(`[Chat Blob Upload] Document record created: ${newDocument.id}`);
+             // --- End Save Document ---
+
+             // --- Trigger Pusher Event ---
+             const channelName = `private-consultation-${consultationId}`;
+             // Send necessary document details to clients
+             const pusherPayload = {
+                id: newDocument.id,
+                fileName: newDocument.fileName,
+                storageUrl: newDocument.storageUrl,
+                mimeType: newDocument.mimeType,
+                fileSize: newDocument.fileSize,
+                uploaderId: newDocument.uploaderId, // Include uploader ID
+             };
+             await triggerPusherEvent(channelName, 'new-document', pusherPayload);
+             console.log(`[Chat Blob Upload] Pusher event 'new-document' triggered for channel ${channelName}`);
+             // --- End Pusher Event ---
+
+        } catch (dbOrPusherError) {
+             console.error(`[Chat Blob Upload] Error saving document or triggering Pusher for ${blob.url}:`, dbOrPusherError);
+             // Potentially try to delete the blob if DB save fails? (More complex)
+             // For now, just log the error. The blob exists, but isn't tracked in DB.
         }
       },
     });
 
-    // Return the successful response from handleUpload
+    // Return the successful response from handleUpload (needed by the client uploader)
     return NextResponse.json(jsonResponse);
 
   } catch (error) {
-    console.error('[Blob Upload] Error handling upload:', error);
-    // Return a generic server error response
-     const message = (error instanceof Error) ? error.message : 'Interner Serverfehler beim Upload.';
+    // Catch errors from onBeforeGenerateToken (like auth errors)
+    console.error('[Chat Blob Upload] Error handling upload:', error);
+    const message = (error instanceof Error) ? error.message : 'Interner Serverfehler beim Upload.';
+    // Return appropriate status code based on error type if possible
+    const status = (error as any)?.message?.includes('Nicht autorisiert') ? 401
+                 : (error as any)?.message?.includes('Zugriff') ? 403
+                 : 500;
     return NextResponse.json(
       { error: `Upload fehlgeschlagen: ${message}` },
-      { status: 500 }
+      { status: status }
     );
   }
 }

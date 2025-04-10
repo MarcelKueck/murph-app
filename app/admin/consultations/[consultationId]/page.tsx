@@ -3,19 +3,19 @@ import React from 'react';
 import { auth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { notFound, redirect } from 'next/navigation';
-import ChatInterface from '@/components/features/ChatInterface';
+import ChatInterface from '@/components/features/ChatInterface'; // Ensure correct import path
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, User, Users, FileText, Info, Star, MessageSquareQuote, Mail, Brain, Handshake, Smile } from 'lucide-react'; // Added icons
-import { ConsultationStatus, UserRole, Message, Document as DbDocument, PatientProfile, StudentProfile } from '@prisma/client'; // Explicit types
+import { ArrowLeft, User, Users, FileText, Info, Star, MessageSquareQuote, Mail, Brain, Handshake, Smile } from 'lucide-react';
+import { ConsultationStatus, UserRole, Message, Document as DbDocument, PatientProfile, StudentProfile } from '@prisma/client';
 import { cn } from '@/lib/utils';
 import { CONSULTATION_STATUS_LABELS, CONSULTATION_STATUS_COLORS } from '@/lib/constants';
-import DocumentLink from '@/components/features/DocumentLink';
+import DocumentLink from '@/components/features/DocumentLink'; // Ensure correct import path
 import { Separator } from '@/components/ui/separator';
+import { format } from 'date-fns'; // Import date-fns format
+import { de } from 'date-fns/locale'; // Import German locale for date-fns
 
-// --- Define detailed type for fetched data ---
-type ConsultationDetailsAdmin = NonNullable<Awaited<ReturnType<typeof getConsultationDataForAdmin>>>
 
 // Helper to display stars with Label
 const RatingDisplay = ({ rating, label, icon: Icon }: { rating: number | null | undefined, label: string, icon?: React.ElementType }) => {
@@ -51,40 +51,38 @@ async function getConsultationDataForAdmin(consultationId: string) {
   try {
       const consultation = await prisma.consultation.findUnique({
         where: { id: consultationId },
-        // Select specific fields and include nested relations correctly
+        // Select fields explicitly
         select: {
-            id: true,
-            topic: true,
-            status: true,
-            patientQuestion: true,
-            summary: true,
-            categories: true,
-            createdAt: true,
-            updatedAt: true,
-            patientId: true,
-            studentId: true,
+            id: true, topic: true, status: true, patientQuestion: true, summary: true, categories: true,
+            createdAt: true, updatedAt: true, patientId: true, studentId: true,
             // Feedback ratings
-            patientRating: true,
-            clarityRating: true,
-            helpfulnessRating: true,
-            communicationRating: true,
-            patientFeedback: true,
-            // Include related data with nested selections
+            patientRating: true, clarityRating: true, helpfulnessRating: true, communicationRating: true, patientFeedback: true,
             messages: {
                 orderBy: { createdAt: 'asc' },
                 include: {
                     sender: {
                         select: {
-                            id: true,
-                            role: true,
-                            image: true,
+                            id: true, role: true, image: true,
                             patientProfile: { select: { firstName: true, lastName: true } },
-                            studentProfile: { select: { firstName: true, lastName: true } },
+                            studentProfile: { select: { firstName: true, lastName: true } }
                         }
+                    },
+                    attachedDocuments: { // Include linked documents for each message
+                        select: {
+                            id: true, fileName: true, storageUrl: true,
+                            mimeType: true, fileSize: true,
+                        },
+                        orderBy: { createdAt: 'asc'}
                     }
                 }
             },
-            documents: { orderBy: { createdAt: 'asc' } },
+            documents: { // Fetch all documents for top list
+                 orderBy: { createdAt: 'asc' },
+                 select: {
+                      id: true, fileName: true, storageUrl: true, mimeType: true,
+                      fileSize: true, uploaderId: true
+                 }
+            },
             patient: {
                 select: {
                     id: true, email: true, role: true,
@@ -113,10 +111,9 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
   const awaitedParams = await params;
   const { consultationId } = awaitedParams;
 
-  // Layout already performs role check, but we can keep session check if needed
+  // Layout already performs role check
   const session = await auth();
   if (!session?.user?.id || session.user.role !== UserRole.ADMIN) {
-      // This shouldn't be reachable if layout works, but as a fallback
       redirect('/login');
   }
 
@@ -128,9 +125,15 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
 
   // Data Preparation for ChatInterface
   const initialMessages = consultation.messages.map(msg => {
+     // Ensure sender exists before accessing properties
      if (!msg.sender) {
           console.warn(`Message ${msg.id} is missing sender data.`);
-          return { id: msg.id, content: msg.content, createdAt: msg.createdAt.toISOString(), sender: { id: 'unknown', role: UserRole.PATIENT, firstName: 'Unbekannt', lastName: '', image: null } };
+          // Provide a default structure if sender is unexpectedly null
+          return {
+              id: msg.id, content: msg.content, createdAt: msg.createdAt.toISOString(),
+              sender: { id: 'unknown', role: UserRole.PATIENT, firstName: 'Unbekannt', lastName: '', image: null },
+              attachedDocuments: [] // Assume no documents if sender is missing
+          };
      }
      const senderProfile = msg.sender.role === UserRole.PATIENT ? msg.sender.patientProfile : msg.sender.studentProfile;
      return {
@@ -143,17 +146,25 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
              firstName: senderProfile?.firstName ?? 'Nutzer',
              lastName: senderProfile?.lastName ?? '',
              image: msg.sender.image,
-         }
+         },
+         attachedDocuments: msg.attachedDocuments.map(doc => ({ // Map the included docs
+             id: doc.id,
+             fileName: doc.fileName,
+             storageUrl: doc.storageUrl,
+             mimeType: doc.mimeType,
+             fileSize: doc.fileSize,
+         }))
      };
   });
 
-  // Map documents safely
-  const initialDocuments = consultation.documents.map(doc => ({
+  // Map all documents for top list
+   const initialDocuments = consultation.documents.map(doc => ({
       id: doc.id,
       fileName: doc.fileName,
       storageUrl: doc.storageUrl,
       mimeType: doc.mimeType,
       fileSize: doc.fileSize,
+      uploaderId: doc.uploaderId
   }));
 
   // Safely access nested properties
@@ -161,7 +172,6 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
   const patientEmail = consultation.patient?.email ?? '-';
   const studentName = consultation.student?.studentProfile ? `${consultation.student.studentProfile.firstName} ${consultation.student.studentProfile.lastName}` : 'Nicht zugewiesen';
   const studentEmail = consultation.student?.email ?? '-';
-
 
   return (
     <div className="space-y-6">
@@ -195,8 +205,8 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
                 </div>
                  {initialDocuments.length > 0 && (
                     <div>
-                        <h4 className="font-medium mb-1 text-sm">Dokumente</h4>
-                        <div className="space-y-2">
+                        <h4 className="font-medium mb-1 text-sm">Alle Dokumente</h4> {/* Changed title */}
+                        <div className="space-y-1"> {/* Reduced spacing slightly */}
                             {initialDocuments.map(doc => <DocumentLink key={doc.id} document={doc} />)}
                         </div>
                     </div>
@@ -228,6 +238,8 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
                         ) : (
                             <p className="text-sm text-muted-foreground italic pt-2">Kein schriftlicher Kommentar abgegeben.</p>
                         )}
+                         {/* Message if no feedback at all */}
+                         {consultation.patientRating === null && ( <p className="text-sm text-muted-foreground italic border-t pt-4 mt-4">Kein Feedback vom Patienten abgegeben.</p> )}
                     </div>
                  )}
             </CardContent>
@@ -242,8 +254,8 @@ export default async function AdminConsultationDetailPage({ params }: { params: 
                     <ChatInterface
                         consultationId={consultation.id}
                         currentUserId={"ADMIN_VIEWER"} // Use a distinct ID for admin view
-                        initialMessages={initialMessages}
-                        initialDocuments={initialDocuments} // Documents are displayed above, pass empty array here
+                        initialMessages={initialMessages} // Pass messages with attached docs
+                        initialDocuments={initialDocuments} // Pass all docs again for top list
                         consultationStatus={consultation.status}
                     />
             </CardContent>

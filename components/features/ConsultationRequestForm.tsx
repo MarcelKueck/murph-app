@@ -18,23 +18,23 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, File as FileIcon, X } from "lucide-react";
+import { Loader2, File as FileIcon, X, LockKeyhole, ShieldCheck, AlertTriangle } from "lucide-react"; // Added AlertTriangle
 import { toast } from "sonner";
 import { useRouter } from 'next/navigation';
-import FileUpload from './FileUpload'; // Import the file upload component
-import { createConsultation, ConsultationActionResult } from '@/actions/consultations'; // Import server action
+import FileUpload from './FileUpload';
+import { createConsultation, ConsultationActionResult } from '@/actions/consultations';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import TrustBadge from '@/components/core/TrustBadge'; // Re-use TrustBadge
-import { LockKeyhole, ShieldCheck } from 'lucide-react';
-import AnimatedCheckmark from '@/components/ui/AnimatedCheckmark'; // Import the checkmark
+// Removed TrustBadge import as it's not used directly anymore
+import AnimatedCheckmark from '@/components/ui/AnimatedCheckmark';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // Import Alert
 
 type FormData = z.infer<typeof ConsultationRequestSchema>;
 
 export default function ConsultationRequestForm() {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
-    const [showSuccess, setShowSuccess] = useState(false); // State for success animation
-    const [uploadedFiles, setUploadedFiles] = useState<UploadedDocument[]>([]); // State to hold completed uploads
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [uploadedFiles, setUploadedFiles] = useState<UploadedDocument[]>([]);
 
     const form = useForm<FormData>({
         resolver: zodResolver(ConsultationRequestSchema),
@@ -66,22 +66,16 @@ export default function ConsultationRequestForm() {
                  setShowSuccess(true); // Show checkmark
                  setTimeout(() => {
                     toast.success("Anfrage gesendet!", { description: result.message });
-                    // Redirect to dashboard after successful submission
                     router.push('/patient/dashboard');
-                    // No need for router.refresh() here due to revalidatePath in action
                  }, 1200); // Delay redirect
             } else {
                 toast.error("Fehler beim Senden", {
                     description: result.message || "Bitte überprüfen Sie Ihre Eingaben.",
                 });
-                 // Handle field errors if returned
                  if (result.fieldErrors) {
                      Object.entries(result.fieldErrors).forEach(([field, errors]) => {
                          if (errors) {
-                             form.setError(field as keyof FormData, {
-                                 type: 'server',
-                                 message: errors.join(', '),
-                             });
+                             form.setError(field as keyof FormData, { type: 'server', message: errors.join(', '), });
                          }
                      });
                  }
@@ -109,6 +103,16 @@ export default function ConsultationRequestForm() {
                  </div>
              </CardHeader>
              <CardContent>
+                 {/* --- Disclaimer Alert --- */}
+                 <Alert variant="destructive" className="mb-6 bg-orange-50 border-orange-200 text-orange-800 [&>svg]:text-orange-600">
+                     <AlertTriangle className="h-4 w-4" />
+                     <AlertTitle className="font-semibold">Wichtiger Hinweis</AlertTitle>
+                     <AlertDescription>
+                         Murph bietet ausschließlich medizinische Erklärungen an. Diese ersetzen **keine** ärztliche Diagnose, Beratung oder Behandlung. Wenden Sie sich bei gesundheitlichen Beschwerden bitte immer an einen Arzt oder eine Ärztin.
+                     </AlertDescription>
+                 </Alert>
+                 {/* --- End Disclaimer --- */}
+
                  <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                         <FormField
@@ -134,7 +138,7 @@ export default function ConsultationRequestForm() {
                                     <FormControl>
                                         <Textarea
                                             placeholder="Beschreiben Sie hier detailliert Ihre Frage oder das Thema, zu dem Sie eine Erklärung wünschen..."
-                                            className="min-h-[150px] resize-y" // Allow vertical resize
+                                            className="min-h-[150px] resize-y"
                                             {...field}
                                              disabled={isPending || showSuccess}
                                         />
@@ -186,7 +190,7 @@ export default function ConsultationRequestForm() {
                             </div>
                          )}
 
-                        {/* --- Modify Submit Button --- */}
+                        {/* Submit Button */}
                         <Button
                             type="submit"
                             className="w-full"
@@ -200,7 +204,6 @@ export default function ConsultationRequestForm() {
                             ) : null}
                             {!showSuccess && 'Beratung anfordern'}
                         </Button>
-                         {/* --- --- */}
                     </form>
                 </Form>
             </CardContent>

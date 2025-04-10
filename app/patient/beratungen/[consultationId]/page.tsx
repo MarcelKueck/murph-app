@@ -7,129 +7,138 @@ import ChatInterface from '@/components/features/ChatInterface';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Lock, Unlock, Edit, User, Users } from 'lucide-react'; // <<< Added User, Users
-import { ConsultationStatus, UserRole } from '@prisma/client';
+import { ArrowLeft, Lock, Unlock, Edit } from 'lucide-react';
+import { ConsultationStatus, UserRole, Message, Document as DbDocument, StudentProfile } from '@prisma/client'; // Use Prisma types
 import { cn } from '@/lib/utils';
 import { CONSULTATION_STATUS_LABELS, CONSULTATION_STATUS_COLORS } from '@/lib/constants';
-import PdfDownloadButton from '@/components/features/PdfDownloadButton'; // <<< Import the download button
+import PdfDownloadButton from '@/components/features/PdfDownloadButton'; // Import download button
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
+
+// Define type for the full consultation data needed on this page
+type ConsultationDataPatient = NonNullable<Awaited<ReturnType<typeof getConsultationData>>>;
 
 // Server-side function to fetch data for the specific consultation
 async function getConsultationData(consultationId: string, userId: string) {
   try {
-      // Fetch consultation with necessary relations and selected fields
       const consultation = await prisma.consultation.findUnique({
         where: {
           id: consultationId,
           patientId: userId, // Ensure it belongs to the logged-in patient
         },
-        // Select only the fields needed for this page
-        select: {
-            id: true,
-            topic: true,
-            status: true,
-            summary: true,
-            patientRating: true, // Needed for feedback check
-            createdAt: true,
-            updatedAt: true,
-            patientId: true,
-            studentId: true,
-            messages: {
-                orderBy: { createdAt: 'asc' },
-                include: {
-                  sender: {
-                    select: {
-                      id: true,
-                      role: true,
-                      image: true,
-                      patientProfile: { select: { firstName: true, lastName: true } },
-                      studentProfile: { select: { firstName: true, lastName: true } },
-                    }
-                  }
+        select: { // Select only necessary fields
+           id: true,
+           topic: true,
+           status: true,
+           summary: true,
+           patientRating: true,
+           createdAt: true,
+           updatedAt: true,
+           patientId: true,
+           studentId: true,
+           messages: {
+               orderBy: { createdAt: 'asc' },
+               include: {
+                   sender: {
+                       select: {
+                          id: true, role: true, image: true,
+                          patientProfile: { select: { firstName: true, lastName: true } },
+                          studentProfile: { select: { firstName: true, lastName: true } },
+                       }
+                   },
+                   // Include the linked documents for each message
+                   attachedDocuments: {
+                        select: {
+                            id: true, fileName: true, storageUrl: true,
+                            mimeType: true, fileSize: true,
+                        },
+                        orderBy: { createdAt: 'asc' } // Optional: order attached docs
+                   }
+               }
+           },
+           documents: { // Fetch all documents for the top list as well
+               orderBy: { createdAt: 'asc' },
+               select: { // Select only needed fields for top list
+                    id: true, fileName: true, storageUrl: true, mimeType: true, fileSize: true, uploaderId: true
+               }
+           },
+           student: { // Include student details
+                select: {
+                     studentProfile: {
+                         select: { firstName: true, lastName: true, university: true }
+                     }
                 }
-            },
-            documents: {
-                orderBy: { createdAt: 'asc' },
-                // Select necessary document fields if needed, otherwise true is fine
-                select: { id: true, fileName: true, storageUrl: true, mimeType: true, fileSize: true }
-            },
-            student: { // Include student details
-                 select: {
-                    studentProfile: {
-                        select: { firstName: true, lastName: true, university: true }
-                    }
-                 }
-            }
-           // No need to select 'patient' again as we filter by patientId
+           }
         }
       });
-      return consultation; // Can be null if not found or access denied by where clause
+      return consultation;
   } catch (error) {
       console.error(`Error fetching consultation data for ID ${consultationId}:`, error);
-      return null; // Return null on error
+      return null;
   }
 }
-
 
 // The main Server Component for the page
 export default async function PatientConsultationDetailPage({ params }: { params: { consultationId: string } }) {
   const session = await auth();
-  const awaitedParams = await params; // Await params
+  const awaitedParams = await params;
   const { consultationId } = awaitedParams;
 
-  // Authentication and Role Check
   if (!session?.user?.id || session.user.role !== UserRole.PATIENT) {
-    redirect(`/login?callbackUrl=/patient/beratungen/${consultationId}`);
+    redirect(`/login?callbackUrl=/patient/consultations/${consultationId}`);
   }
   const userId = session.user.id;
 
-  // Fetch Consultation Data
   const consultation = await getConsultationData(consultationId, userId);
 
-  // Handle Not Found or Access Denied
   if (!consultation) {
     notFound();
   }
 
-  // Determine Summary State
   const isCompleted = consultation.status === ConsultationStatus.COMPLETED;
   const feedbackGiven = consultation.patientRating !== null;
   const showLockedSummary = isCompleted && !feedbackGiven;
   const showUnlockedSummary = isCompleted && feedbackGiven;
 
-  // Prepare Data for Child Components
+  // Data Preparation for ChatInterface - mapping attachedDocuments
   const initialMessages = consultation.messages.map(msg => {
-     // Add check for potentially missing sender (though unlikely with correct query)
-     if (!msg.sender) return null; // Or return a default sender structure
-     const senderProfile = msg.sender.role === UserRole.PATIENT ? msg.sender.patientProfile : msg.sender.studentProfile;
-    return {
-        id: msg.id,
-        content: msg.content,
-        createdAt: msg.createdAt.toISOString(),
-        sender: {
-            id: msg.sender.id,
-            role: msg.sender.role,
-            firstName: senderProfile?.firstName ?? 'Nutzer',
-            lastName: senderProfile?.lastName ?? '',
-            image: msg.sender.image,
-        }
-    };
-  }).filter(Boolean) as any[]; // Filter out any null messages
+     const senderProfile = msg.sender?.role === UserRole.PATIENT ? msg.sender.patientProfile : msg.sender?.studentProfile;
+     return {
+         id: msg.id,
+         content: msg.content,
+         createdAt: msg.createdAt.toISOString(),
+         sender: {
+             id: msg.sender?.id ?? 'unknown', // Handle potential null sender
+             role: msg.sender?.role ?? UserRole.PATIENT,
+             firstName: senderProfile?.firstName ?? 'Nutzer',
+             lastName: senderProfile?.lastName ?? '',
+             image: msg.sender?.image,
+         },
+         attachedDocuments: msg.attachedDocuments.map(doc => ({ // Map the included docs
+             id: doc.id,
+             fileName: doc.fileName,
+             storageUrl: doc.storageUrl,
+             mimeType: doc.mimeType,
+             fileSize: doc.fileSize,
+         }))
+     };
+  });
 
-  const initialDocuments = consultation.documents.map(doc => ({
+   // Map all documents for the top list
+   const initialDocuments = consultation.documents.map(doc => ({
       id: doc.id,
       fileName: doc.fileName,
       storageUrl: doc.storageUrl,
       mimeType: doc.mimeType,
       fileSize: doc.fileSize,
+      uploaderId: doc.uploaderId, // Pass uploaderId if DocumentLink needs it
   }));
 
-  // Get Student Info Safely
   const studentName = consultation.student?.studentProfile
     ? `${consultation.student.studentProfile.firstName} ${consultation.student.studentProfile.lastName}`
     : 'Wird zugewiesen...';
   const studentUniversity = consultation.student?.studentProfile?.university ?? '';
 
-  // Prepare filename for download button
   const safeTopic = consultation.topic.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'beratung';
   const defaultPdfFilename = `murph_zusammenfassung_${safeTopic}.pdf`;
 
@@ -151,10 +160,10 @@ export default async function PatientConsultationDetailPage({ params }: { params
           <CardTitle className="text-2xl">Beratung: {consultation.topic}</CardTitle>
            <CardDescription>
                 {consultation.studentId
-                    ? (<span className='flex items-center'><Users className="h-4 w-4 mr-1.5"/> Erklärung von: {studentName} ({studentUniversity})</span>)
+                    ? `Ihre Erklärung von: ${studentName} (${studentUniversity})`
                     : 'Ihre Anfrage wartet auf die Zuweisung eines Studenten.'
                 }
-                 <span className={cn("ml-2 px-2 py-0.5 rounded text-xs font-medium border align-middle", // Use align-middle if needed
+                 <span className={cn("ml-2 px-2 py-0.5 rounded text-xs font-medium border",
                      CONSULTATION_STATUS_COLORS[consultation.status] || 'bg-gray-100 text-gray-800 border-gray-300'
                  )}>
                      {CONSULTATION_STATUS_LABELS[consultation.status] || consultation.status}
@@ -165,15 +174,14 @@ export default async function PatientConsultationDetailPage({ params }: { params
           <ChatInterface
             consultationId={consultation.id}
             currentUserId={userId}
-            initialMessages={initialMessages}
-            initialDocuments={initialDocuments}
+            initialMessages={initialMessages} // Pass messages with attached docs
+            initialDocuments={initialDocuments} // Pass all docs for top list
             consultationStatus={consultation.status}
           />
         </CardContent>
       </Card>
 
-       {/* --- Conditional Summary Section --- */}
-       {/* Locked Summary */}
+       {/* Conditional Summary Section */}
        {showLockedSummary && (
             <Card className="border-dashed border-amber-400 bg-amber-50/50">
                 <CardHeader className="text-center">
@@ -193,24 +201,21 @@ export default async function PatientConsultationDetailPage({ params }: { params
             </Card>
        )}
 
-       {/* Unlocked Summary */}
        {showUnlockedSummary && (
            <Card>
                <CardHeader>
-                    {/* Flex container for Title/Desc and Button */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
-                         <div className='flex-grow'> {/* Allow text to take space */}
+                    <div className="flex justify-between items-start gap-2">
+                         <div>
                             <CardTitle className="flex items-center gap-2">
                                 <Unlock className='h-5 w-5 text-green-600'/> Zusammenfassung der Erklärung
                             </CardTitle>
                             <CardDescription>Dies ist die Zusammenfassung, die der Medizinstudent für Sie erstellt hat.</CardDescription>
                         </div>
-                         {/* Download Button */}
-                        <div className='flex-shrink-0 mt-2 sm:mt-0'> {/* Prevent button shrink/wrap */}
+                        <div className='flex-shrink-0'>
                              <PdfDownloadButton
                                 consultationId={consultation.id}
                                 defaultFileName={defaultPdfFilename}
-                                buttonSize="sm" // Consistent button size
+                                buttonSize="sm"
                              />
                         </div>
                     </div>
@@ -221,15 +226,14 @@ export default async function PatientConsultationDetailPage({ params }: { params
                             {consultation.summary}
                         </p>
                    ) : (
-                        <p className="text-sm text-muted-foreground italic text-center py-4">
-                            (Für diese Beratung wurde keine Zusammenfassung vom Studenten hinterlegt.)
+                        <p className="text-sm text-muted-foreground italic">
+                            Keine Zusammenfassung vom Studenten hinterlegt.
                         </p>
                    )}
                </CardContent>
            </Card>
        )}
        {/* --- End Conditional Summary Section --- */}
-
     </div>
   );
 }
